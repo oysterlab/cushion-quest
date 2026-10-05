@@ -1,0 +1,10 @@
+{
+  "name": "내 쿠션 내놔!",
+  "short_name": "내 쿠션 내놔",
+  "start_url": "intro.html",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#05060f",
+  "theme_color": "#05060f",
+  "icons": [{ "src": "assets/favicon.png", "sizes": "104x80", "type": "image/png" }]
+}

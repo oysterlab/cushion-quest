@@ -2,19 +2,10 @@
 
 [브라우저에서 플레이](https://oysterlab.github.io/cushion-quest/)
 
-인트로 → Chapter 1 「성 아랫마을」 → Stage 1–5 및 보스로 이어지는 고양이 액션 게임입니다. PC 키보드와 모바일 터치 조작을 지원합니다.
+도둑맞은 쿠션을 되찾으러 왕의 성을 오르는 고양이 냥이의 흡입 아케이드 게임. 스토리 인트로 → 6장 30스테이지(보스 6) → 최종 엔딩, 반송 도장 5개를 모으면 에필로그.
 
-- PC: ← → 이동, Z/Space 점프, X 길게 흡입·다시 X 발사, ↓+Z 내려가기, P 일시정지, M 소리
-- 모바일: 이동 다이얼, 점프·흡입 버튼, 일시정지. 세로·가로·폴더블 화면 자동 배치
-- 인트로: 화면 탭 또는 Z/Space/Enter로 진행, SKIP으로 건너뛰기
+- 첫 화면에서 **처음부터**(스토리 인트로) 또는 **챕터 1~6**을 바로 고를 수 있습니다. 챕터 직접 링크: `game/index.html?chapter=N`
+- PC: ← → 이동, Z 점프, X 꾹 흡입 / 톡 발사, C 슬라이딩, ↓+Z 내려가기, P 일시정지, M 소리, Esc 컷신 건너뛰기
+- 모바일: 다이얼 이동, 점프·슬라이딩·흡입 버튼, 일시정지. 세로·가로·폴더블 화면 자동 배치. 처음 조작할 때 소리가 켜집니다.
 
-`site/`만 GitHub Pages에 배포합니다. 생성 원본·프롬프트·검수 캡처·ROM은 포함하지 않습니다. 스프라이트는 원본 크기와 투명도를 유지한 무손실 WebP, 게임 코드는 esbuild로 압축했습니다. 음악과 효과음은 Web Audio로 재생합니다. 모바일에서는 처음 조작할 때 소리가 활성화됩니다.
-
-로컬 원본은 `recovery/intro-cutscene`, `recovery/chapter1`, `recovery/shared`입니다. 이 저장소가 원래 프로젝트의 `publishing/cushion-quest`에 위치할 때:
-
-```sh
-../../recovery/.venv/bin/python scripts/build.py
-python3 -m http.server 8872 --directory site
-```
-
-`main`에 변경 사항을 push하면 Pages가 다시 배포됩니다. 현재 빌드의 파일 목록과 용량은 `build-report.json`에 기록됩니다.
+`site/`만 GitHub Pages에 배포합니다(`.github/workflows/pages.yml`, `main`에 push하면 자동 배포). 사이트는 게임 원본 프로젝트의 `tools/build_site.py`로 생성합니다(스프라이트는 무손실 WebP). 음악과 효과음은 Web Audio로 실시간 합성합니다.

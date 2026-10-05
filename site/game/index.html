@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#05060f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/favicon.png">
+<title>내 쿠션 내놔! · Chapter 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Titan+One&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { -webkit-tap-highlight-color: transparent; outline: none; }
+  html, body { margin: 0; height: 100%; background: #05060f; overflow: hidden; }
+  body { display: grid; place-items: center; }
+  #game {
+    width: min(100vw, calc(100vh * 4 / 3));
+    aspect-ratio: 4 / 3;
+    display: block;
+    background: #05060f;
+    box-shadow: 0 0 0 1px #1a1d3a, 0 20px 80px rgba(0,0,0,.6);
+  }
+  /* preload fonts so canvas text never falls back mid-game */
+  .fontwarm { position: absolute; left: -9999px; font-size: 1px; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="내 쿠션 내놔! Chapter 1 game"></canvas>
+<div class="fontwarm"><span style="font-family:'Black Han Sans'">가</span><span style="font-family:'Do Hyeon'">가</span><span style="font-family:'Titan One'">A</span></div>
+<script src="assets/manifest.js"></script>
+<script src="story/script.js"></script>
+<script src="js/cutfx.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/game.js"></script>
+<script src="js/touch.js"></script>
+</body>
+</html>

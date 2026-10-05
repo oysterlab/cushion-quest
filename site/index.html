@@ -1,1 +1,86 @@
-<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>내 쿠션 내놔!</title><meta name="description" content="내 쿠션을 되찾는 고양이의 코믹 모험. PC와 모바일에서 즐기는 Chapter 1."><meta http-equiv="refresh" content="0;url=intro-cutscene/"><script>location.replace(new URL('intro-cutscene/'+location.search+location.hash,location.href))</script><body style="background:#05060f;color:#fff;font-family:system-ui"><a href="intro-cutscene/" style="color:inherit">내 쿠션 내놔! 시작하기</a></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>내 쿠션 내놔!</title>
+<meta name="description" content="도둑맞은 쿠션을 되찾으러 왕의 성을 오르는 고양이의 흡입 아케이드 게임">
+<link rel="icon" href="game/assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #150f2b; --card: #221a45; --line: #3d3270; --gold: #ffd23a; --red: #ff5a4e; --text: #fff6e6; --dim: #cfc8f2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(1200px 600px at 50% -10%, #3a2a6e 0%, var(--bg) 60%); background-color: var(--bg); color: var(--text); font-family: "Do Hyeon", sans-serif; min-height: 100vh; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { text-align: center; }
+  h1 { font-family: "Black Han Sans", sans-serif; font-size: clamp(44px, 10vw, 88px); margin: 8px 0 4px; letter-spacing: 1px; color: var(--gold);
+        text-shadow: 0 4px 0 #e8590c, 0 8px 0 #0b0d1f; }
+  h1 span { color: var(--red); text-shadow: 0 4px 0 #8f1020, 0 8px 0 #0b0d1f; }
+  .sub { color: var(--dim); font-size: 18px; margin: 10px 0 22px; }
+  .start { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 30px; }
+  .btn { font-family: "Black Han Sans", sans-serif; font-size: 22px; text-decoration: none; padding: 14px 26px; border-radius: 999px; border: 3px solid #0b0d1f; box-shadow: 0 5px 0 #0b0d1f; }
+  .btn.main { background: var(--gold); color: #2a1606; }
+  .btn.alt { background: #2fc4e8; color: #062030; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #0b0d1f; }
+  h2 { font-family: "Black Han Sans", sans-serif; font-weight: normal; font-size: 26px; margin: 0 0 14px; color: #7ff0ff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .card { display: block; background: var(--card); border: 2px solid var(--line); border-radius: 16px; overflow: hidden; text-decoration: none; color: inherit; transition: transform .12s, border-color .12s; }
+  .card:hover, .card:focus-visible { transform: translateY(-3px); border-color: var(--gold); outline: none; }
+  .card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  .meta { padding: 12px 16px 16px; }
+  .no { color: var(--gold); font-size: 15px; letter-spacing: 1px; }
+  .meta b { display: block; font-family: "Black Han Sans", sans-serif; font-weight: normal; font-size: 26px; margin: 2px 0; }
+  .meta i { font-style: normal; color: var(--dim); font-size: 14px; }
+  .meta p { margin: 8px 0 0; font-size: 17px; color: #efe9ff; }
+  .help { margin-top: 30px; background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; color: var(--dim); font-size: 16px; line-height: 1.6; }
+  .help b { color: var(--text); font-weight: normal; }
+  footer { text-align: center; color: #8d84bd; font-size: 14px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>내 쿠션 <span>내놔!</span></h1>
+    <p class="sub">도둑맞은 쿠션을 되찾으러 왕의 성을 오르는 고양이 냥이의 흡입 아케이드 · 6장 30스테이지</p>
+    <div class="start">
+      <a class="btn main" href="game/intro.html?replay">▶ 처음부터 (스토리 인트로)</a>
+      <a class="btn alt" href="game/index.html">이어하기 / 타이틀</a>
+    </div>
+  </header>
+  <h2>챕터 선택</h2>
+  <div class="grid">
+    <a class="card" href="game/index.html?chapter=1">
+      <img src="thumbs/ch1.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 1</span><b>성 아랫마을</b><i>CASTLE TOWN · STAGE 1-1 ~ 1-5</i><p>도둑 고블린을 쫓아 마을 광장에서 도둑 소굴까지.</p></div>
+    </a>
+    <a class="card" href="game/index.html?chapter=2">
+      <img src="thumbs/ch2.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 2</span><b>폭신 정원</b><i>FLUFFY GARDEN · STAGE 2-1 ~ 2-5</i><p>방패 고블린, 단추병, 그리고 왕의 전령.</p></div>
+    </a>
+    <a class="card" href="game/index.html?chapter=3">
+      <img src="thumbs/ch3.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 3</span><b>뽀송 세탁소</b><i>STEAMY LAUNDRY · STAGE 3-1 ~ 3-5</i><p>물방울 탄으로 수건 갑옷을 벗겨라.</p></div>
+    </a>
+    <a class="card" href="game/index.html?chapter=4">
+      <img src="thumbs/ch4.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 4</span><b>금딱 보물창고</b><i>GOLDEN VAULT · STAGE 4-1 ~ 4-5</i><p>저울에 구슬을 굴려 진열장을 열어라.</p></div>
+    </a>
+    <a class="card" href="game/index.html?chapter=5">
+      <img src="thumbs/ch5.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 5</span><b>별빛 침실탑</b><i>STARLIGHT TOWER · STAGE 5-1 ~ 5-5</i><p>졸음을 참고, 종을 울려라.</p></div>
+    </a>
+    <a class="card" href="game/index.html?chapter=6">
+      <img src="thumbs/ch6.webp" alt="" loading="lazy">
+      <div class="meta"><span class="no">CHAPTER 6</span><b>쿠션 왕좌</b><i>THE CUSHION THRONE · STAGE 6-1 ~ 6-5</i><p>천 개의 쿠션 왕좌, 그 꼭대기.</p></div>
+    </a>
+  </div>
+  <div class="help">
+    <b>PC</b> ← → 이동 · Z 점프 · X 꾹 흡입 / 톡 발사 · C 슬라이딩 · ↓+Z 내려가기 · P 일시정지 · M 소리 · Esc 컷신 건너뛰기<br>
+    <b>모바일</b> 다이얼 이동 · 파랑 점프 · 보라 슬라이딩 · 빨강 꾹 흡입 / 탭 발사 (가로·세로·폴더블 자동 배치)<br>
+    반송 도장 5개(2-3 · 3-3 · 4-3 · 5-3 · 6-3)를 모두 모으면 엔딩 뒤 이야기가 있어요.
+  </div>
+  <footer>내 쿠션 내놔! · 음악과 효과음은 Web Audio로 실시간 합성됩니다.</footer>
+</main>
+</body>
+</html>

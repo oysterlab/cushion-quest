@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="icon" href="assets/favicon.png">
+<title>내 쿠션 내놔! 인트로</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Titan+One&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0b0d1f;
+    --box: #14185a;
+    --box-edge: #fff6d8;
+    --gold: #ffd23a;
+    --gold-deep: #e8590c;
+    --text: #fffaf0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #05060f; overflow: hidden; }
+  body {
+    display: grid; place-items: center;
+    font-family: "Do Hyeon", system-ui, sans-serif; color: var(--text);
+    user-select: none; cursor: pointer;
+  }
+
+  /* 4:3 cabinet screen */
+  #screen {
+    position: relative;
+    width: min(100vw, calc(100vh * 4 / 3));
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: var(--ink);
+    container-type: inline-size;
+  }
+  .scene {
+    position: absolute; inset: 0;
+    opacity: 0; transition: opacity .45s steps(6);
+  }
+  .scene.on { opacity: 1; }
+  .scene .cam, .scene .fxc { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 50%; }
+  .scene img, .scene .ph {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; transform-origin: 50% 50%;
+    image-rendering: auto;
+  }
+  .ph {
+    display: grid; place-items: center;
+    font-family: "Press Start 2P", monospace; font-size: 2cqw; color: #8890c8;
+    background: repeating-linear-gradient(45deg, #1a1f55 0 20px, #151a48 20px 40px);
+  }
+
+  /* camera moves */
+  @keyframes kb-in   { from { transform: scale(1.02); } to { transform: scale(1.14) translate(-2%, 1%); } }
+  @keyframes kb-out  { from { transform: scale(1.18) translate(3%, 0); } to { transform: scale(1.03); } }
+  @keyframes kb-pan  { from { transform: scale(1.15) translate(4%, 0); } to { transform: scale(1.15) translate(-4%, 0); } }
+  @keyframes kb-up   { from { transform: scale(1.2) translate(0, -5%); } to { transform: scale(1.06) translate(0, 0); } }
+  @keyframes kb-king { from { transform: scale(1.03) translate(0, 1.5%); } to { transform: scale(1.1) translate(0, 4.5%); } }
+  @keyframes kb-push { from { transform: scale(1); } to { transform: scale(1.1); } }
+
+  @keyframes shake {
+    0%,100% { transform: translate(0,0); }
+    20% { transform: translate(-1.2cqw, .6cqw); }
+    40% { transform: translate(1cqw, -.8cqw); }
+    60% { transform: translate(-.7cqw, -.4cqw); }
+    80% { transform: translate(.5cqw, .5cqw); }
+  }
+  #screen.shake { animation: shake .35s steps(5) 1; }
+
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 8; }
+  #flash.go { animation: flash .3s steps(3) 1; }
+  @keyframes flash { 0% { opacity: .95; } 100% { opacity: 0; } }
+
+  /* onomatopoeia */
+  .sfx {
+    position: absolute; z-index: 6;
+    font-family: "Black Han Sans", sans-serif; font-size: 9cqw; line-height: 1;
+    color: var(--gold);
+    -webkit-text-stroke: .5cqw var(--ink);
+    paint-order: stroke fill;
+    text-shadow: .5cqw .6cqw 0 var(--gold-deep), .9cqw 1.1cqw 0 var(--ink);
+    transform: rotate(-8deg) scale(0);
+    animation: pop .4s cubic-bezier(.2, 1.8, .4, 1) forwards;
+  }
+  @keyframes pop { to { transform: rotate(-8deg) scale(1); } }
+
+  /* dialogue box, arcade style */
+  #talk {
+    position: absolute; left: 3%; right: 3%; bottom: 3.5%; z-index: 7;
+    min-height: 19%;
+    padding: 2.2cqw 3cqw 2.4cqw;
+    background: linear-gradient(180deg, #2a30a0 0%, var(--box) 60%);
+    border: .55cqw solid var(--box-edge);
+    border-radius: 1.2cqw;
+    box-shadow: 0 0 0 .5cqw var(--ink), .9cqw .9cqw 0 .5cqw rgba(0,0,0,.55);
+    font-size: 3.6cqw; line-height: 1.35;
+    text-shadow: .25cqw .25cqw 0 var(--ink);
+    display: none;
+  }
+  #talk.on { display: block; }
+  #talk.narr { background: rgba(5, 6, 20, .82); border-color: #8d93c9; text-align: center; font-size: 3.3cqw; }
+  #name {
+    position: absolute; top: -3.6cqw; left: 2.4cqw;
+    padding: .7cqw 1.8cqw;
+    font-family: "Black Han Sans", sans-serif; font-size: 2.6cqw;
+    color: var(--ink); background: var(--gold);
+    border: .45cqw solid var(--ink); border-radius: .8cqw;
+    text-shadow: none;
+  }
+  #name:empty { display: none; }
+  #next {
+    position: absolute; right: 2.2cqw; bottom: 1.3cqw;
+    width: 0; height: 0;
+    border-left: 1.1cqw solid transparent; border-right: 1.1cqw solid transparent;
+    border-top: 1.3cqw solid var(--gold);
+    animation: blink .6s steps(2) infinite; display: none;
+  }
+  #talk.done #next { display: block; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* title card */
+  #title {
+    position: absolute; inset: 0; z-index: 9;
+    display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding-top: 5%;
+  }
+  #title.on { display: flex; }
+  #title .sub {
+    font-family: "Press Start 2P", monospace; font-size: 1.6cqw; color: #fff;
+    letter-spacing: .3cqw; text-shadow: .3cqw .3cqw 0 var(--ink);
+    opacity: 0; animation: fadein .3s steps(3) .9s forwards;
+  }
+  #title h1 {
+    margin: 1.4cqw 0 0;
+    font-family: "Black Han Sans", sans-serif; font-weight: 400;
+    font-size: 12cqw; line-height: 1; letter-spacing: -.2cqw;
+    color: var(--gold);
+    -webkit-text-stroke: .7cqw var(--ink); paint-order: stroke fill;
+    text-shadow: 0 .8cqw 0 var(--gold-deep), 0 1.6cqw 0 var(--ink), 0 2.4cqw 1.5cqw rgba(0,0,0,.5);
+    transform: translateY(-140%) scale(1.2);
+    animation: drop .7s cubic-bezier(.3, 1.6, .5, 1) forwards;
+  }
+  #title h1 span { color: #ff5a4e; text-shadow: 0 .8cqw 0 #8f1020, 0 1.6cqw 0 var(--ink); }
+  @keyframes drop { to { transform: translateY(0) scale(1); } }
+  @keyframes fadein { to { opacity: 1; } }
+  @keyframes fadeout { to { opacity: 0; } }
+  #press {
+    position: absolute; bottom: 7%; left: 0; right: 0; text-align: center;
+    font-family: "Press Start 2P", monospace; font-size: 2.2cqw; color: #fff;
+    text-shadow: .3cqw .3cqw 0 var(--ink);
+    animation: blink 1s steps(2) infinite 1.4s; opacity: 0;
+  }
+  #title.on #press { opacity: 1; }
+
+  /* CRT */
+  #crt {
+    position: absolute; inset: 0; z-index: 10; pointer-events: none;
+    background:
+      repeating-linear-gradient(180deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.5) 100%);
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  /* touch screens: no keyboard hints */
+  @media (pointer: coarse) {
+    #hint { display: none !important; }
+    #skip { font-size: 14px; padding: 0 16px; min-height: 46px; box-sizing: border-box; display: flex; align-items: center; border-radius: 12px; background: rgba(11,13,31,.6); color: #fff6d8; border: 2px solid rgba(255,246,214,.4); }
+  }
+  #skip {
+    position: fixed; top: 10px; right: 12px; z-index: 20;
+    font-family: "Press Start 2P", monospace; font-size: 10px; color: #8d93c9;
+  }
+  #hint {
+    position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; z-index: 20;
+    font-size: 13px; color: #5b6090;
+    animation: fadeout 1s 4s forwards;
+  }
+</style>
+</head>
+<body>
+<div id="screen">
+  <div id="scenes"></div>
+  <div id="flash"></div>
+  <div id="talk"><div id="name"></div><div id="line"></div><div id="next"></div></div>
+  <div id="title">
+    <div class="sub">A CUSHION RESCUE STORY</div>
+    <h1>내 쿠션 <span>내놔!</span></h1>
+    <div id="press">PRESS START</div>
+  </div>
+  <div id="crt"></div>
+</div>
+<div id="skip">SKIP ▶</div>
+<div id="hint">클릭 · Z · Space · Enter 로 진행</div>
+
+<script src="story/script.js"></script>
+<script src="js/cutfx.js"></script>
+<script>
+// ---- Storyboard -----------------------------------------------------------
+// Each scene: image + camera move, then a list of beats.
+// Beat types: say (dialogue/narration), sfx (pop text), shake, flash, wait.
+const SC = Object.fromEntries((window.SCRIPT ? SCRIPT.intro : []).map(x => [x.scene, x.lines]));
+const lines = id => (SC[id] || []).map(l => ({ say: l.text, who: l.who || undefined, narr: !l.who }));
+const STORY = [
+  { id: "nap", rig: "s1", img: "assets/bg/s1.webp", cam: "kb-in 10s", beats: [
+    ...lines("nap") ],
+    fx: { fx: [{ type: "zzz", x: .27, y: .33 }, { type: "motes", n: 26, x0: .0, y0: .0, w: .5, h: .6 }] } },
+  { id: "snatch", rig: "s2", img: "assets/bg/s2.webp", cam: "kb-push 3s", beats: [
+    { flash: true }, { shake: true }, { sfx: "휘익—!!", x: 50, y: 6 }, { wait: 600 }, ...lines("snatch") ],
+    fx: { fx: [{ type: "speed", n: 14, y0: .05, h: .9, dir: -1 }, { type: "dust", x: .2, y: .78, n: 8, dir: -1 }] } },
+  { id: "thud", rig: "s3", img: "assets/bg/s3.webp", cam: "kb-out 9s", beats: [
+    { shake: true }, { sfx: "털썩.", x: 4, y: 26, size: 8 }, { wait: 500 }, ...lines("thud") ],
+    fx: { fx: [{ type: "orbit", x: .47, y: .55, r: .035 }, { type: "motes", n: 18, x0: .55, y0: .0, w: .45, h: .5 }] } },
+  { id: "chase", rig: "s4", img: "assets/bg/s4.webp", cam: "kb-pan 10s", beats: [
+    { sfx: "다다다닷!", x: 6, y: 58, size: 7 }, ...lines("chase") ],
+    fx: { fx: [{ type: "dust", x: .3, y: .84, n: 8, dir: 1 }, { type: "dust", x: .72, y: .86, n: 8, dir: 1 }, { type: "glow", x: .45, y: .2, r: .2, color: "rgba(255,210,150,.4)" }] } },
+  { id: "king", img: "assets/bg/s5.webp", cam: "kb-king 9s", beats: [
+    { flash: true }, ...lines("king") ],
+    fx: { fx: [{ type: "sparkles", n: 18, x0: .1, y0: .3, w: .8, h: .5 }, { type: "glow", x: .55, y: .55, r: .3, color: "rgba(255,200,255,.25)" }] } },
+  { id: "ready", rig: "s6", img: "assets/bg/s6.webp", cam: "kb-push 7s", beats: [
+    ...lines("ready"), { title: true } ],
+    fx: { fx: [{ type: "rays", x: .5, y: .55 }, { type: "sparkles", n: 14, x0: .05, y0: .1, w: .9, h: .8 }] } },
+];
+
+// ---- Tiny chiptune SFX ----------------------------------------------------
+let ac;
+function tone(freq, dur, type = "square", vol = .05, slide = 0) {
+  try {
+    ac ||= new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur);
+  } catch (_) {}
+}
+const sfx = {
+  blip: () => tone(880 + Math.random() * 120, .03, "square", .025),
+  whoosh: () => tone(1400, .35, "sawtooth", .05, -1200),
+  thud: () => tone(160, .3, "triangle", .2, -110),
+  pop: () => tone(520, .12, "square", .05, 500),
+  fanfare: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, .18, "square", .06), i * 110)),
+};
+
+// ---- Player ---------------------------------------------------------------
+const $ = id => document.getElementById(id);
+const screen = $("screen"), talk = $("talk"), line = $("line"), nameEl = $("name");
+const layers = STORY.map((s, i) => {
+  const el = document.createElement("div");
+  el.className = "scene";
+  const cam = document.createElement("div"); cam.className = "cam";
+  const img = new Image();
+  img.src = s.img; img.alt = "";
+  img.onerror = () => { const ph = document.createElement("div"); ph.className = "ph"; ph.textContent = `SCENE ${i + 1}`; img.replaceWith(ph); };
+  const fxc = document.createElement("canvas"); fxc.className = "fxc";
+  cam.append(img, fxc); el.appendChild(cam);
+  $("scenes").appendChild(el);
+  el.fx = window.CutFX ? CutFX.create(img, s.fx) : null; el.fxc = fxc; el.t0 = 0;
+  // parts-animated scene: the <img> shows the clean plate, characters are drawn by the rig on the fx canvas
+  // repainted scene with the current character design (static painting; no parts animation)
+  el.rig = null;
+  return el;
+});
+
+let si = -1, bi = -1, typing = null, waitTimer = null, ended = false, awaitingInput = false;
+
+function showScene(i) {
+  layers.forEach((l, k) => l.classList.toggle("on", k === i));
+  const media = layers[i].firstChild; // the camera wrapper (painting + fx move together)
+  media.style.animation = "none"; void media.offsetWidth;
+  media.style.animation = `${STORY[i].cam} ease-in-out forwards`;
+  layers[i].t0 = performance.now();
+  document.querySelectorAll(".sfx").forEach(n => n.remove());
+}
+
+function nextBeat() {
+  clearTimeout(waitTimer); awaitingInput = false;
+  if (ended) return;
+  bi++;
+  if (si < 0 || bi >= STORY[si].beats.length) {
+    si++; bi = 0;
+    if (si >= STORY.length) return;
+    talk.classList.remove("on");
+    showScene(si);
+    waitTimer = setTimeout(runBeat, 500);
+    return;
+  }
+  runBeat();
+}
+
+function runBeat() {
+  const b = STORY[si].beats[bi];
+  if (b.say) return say(b);
+  talk.classList.remove("on");
+  if (b.flash) { const f = $("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); sfx.whoosh(); }
+  if (b.shake) { screen.classList.remove("shake"); void screen.offsetWidth; screen.classList.add("shake"); sfx.thud(); }
+  if (b.sfx) {
+    const s = document.createElement("div");
+    s.className = "sfx"; s.textContent = b.sfx;
+    s.style.left = b.x + "%"; s.style.top = b.y + "%";
+    if (b.size) s.style.fontSize = b.size + "cqw";
+    layers[si].appendChild(s); sfx.pop();
+  }
+  if (b.title) return showTitle();
+  waitTimer = setTimeout(nextBeat, b.wait ?? 450);
+}
+
+function say(b) {
+  talk.classList.add("on"); talk.classList.remove("done");
+  talk.classList.toggle("narr", !!b.narr);
+  nameEl.textContent = b.who || "";
+  line.textContent = "";
+  const chars = [...b.say]; let n = 0;
+  clearInterval(typing);
+  typing = setInterval(() => {
+    line.textContent += chars[n++];
+    if (n % 2) sfx.blip();
+    if (n >= chars.length) finishTyping();
+  }, 45);
+}
+function finishTyping() {
+  clearInterval(typing); typing = null;
+  line.textContent = STORY[si].beats[bi].say;
+  talk.classList.add("done");
+  awaitingInput = true;
+  // auto-advance like an attract-mode cutscene
+  waitTimer = setTimeout(nextBeat, 1600 + line.textContent.length * 60);
+}
+
+function showTitle() {
+  ended = true; titleAt = performance.now();
+  talk.classList.remove("on");
+  $("title").classList.add("on");
+  screen.classList.remove("shake"); void screen.offsetWidth;
+  setTimeout(() => { screen.classList.add("shake"); sfx.thud(); }, 600);
+  setTimeout(sfx.fanfare, 800);
+}
+
+function skipAll() {
+  clearInterval(typing); clearTimeout(waitTimer);
+  si = STORY.length - 1; showScene(si); showTitle();
+}
+
+let titleAt = 0;
+function advance() {
+  // PRESS START on the title card starts Chapter 1 (after the logo has landed)
+  if (ended) { if (titleAt && performance.now() - titleAt > 1400) location.href = "index.html?new"; return; }
+  if (typing) return finishTyping();
+  if (awaitingInput) nextBeat();
+}
+
+addEventListener("keydown", e => {
+  if (e.key === "Escape") return skipAll();
+  if (["z", "Z", " ", "Enter"].includes(e.key)) { e.preventDefault(); advance(); }
+});
+addEventListener("pointerdown", e => { if (e.target.id === "skip") { e.stopPropagation(); skipAll(); return; } advance(); });
+// returning players go straight to the game's title
+try { if (+localStorage.getItem("cushion-progress") > 0 && !location.search.includes("replay")) location.replace("index.html"); } catch (_) {}
+
+// per-scene life: breathing characters, zzz, feathers, sparkles… drawn every frame on the FX canvas
+function fxLoop(now) {
+  const l = layers[Math.max(0, si)];
+  if (l && (l.fx || l.rig)) {
+    const c = l.fxc, w = c.clientWidth, h = c.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
+    if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    const t = (now - l.t0) / 1000 * 60;
+    if (l.rig) l.rig.draw(g, w, h, t);
+    if (l.fx) l.fx.draw(g, w, h, t);
+  }
+  requestAnimationFrame(fxLoop);
+}
+requestAnimationFrame(fxLoop);
+nextBeat();
+</script>
+</body>
+</html>
