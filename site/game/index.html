@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#05060f">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/favicon.png">
-<title>내 쿠션 내놔! · Chapter 1</title>
+<title>내 쿠션 내놔!</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Titan+One&family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -22,12 +22,63 @@
     background: #05060f;
     box-shadow: 0 0 0 1px #1a1d3a, 0 20px 80px rgba(0,0,0,.6);
   }
+  /* loading screen (shown before any game script runs) */
+  #loader { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: radial-gradient(900px 520px at 50% 30%, #3a2a6e 0%, #150f2b 62%, #05060f 100%);
+    color: #fff6e6; font-family: "Do Hyeon", sans-serif; transition: opacity .45s ease; text-align: center; padding: 16px; }
+  #loader.out { opacity: 0; pointer-events: none; }
+  #loader .logo { font-family: "Black Han Sans", sans-serif; font-size: clamp(40px, 9vw, 84px); color: #ffd23a; text-shadow: 0 4px 0 #e8590c, 0 8px 0 #0b0d1f; line-height: 1.1; }
+  #loader .logo span { color: #ff5a4e; text-shadow: 0 4px 0 #8f1020, 0 8px 0 #0b0d1f; }
+  #loader .sub { color: #cfc8f2; font-size: clamp(14px, 2.6vw, 18px); margin: 10px 0 28px; letter-spacing: .5px; }
+  #loader .track { position: relative; width: min(78vw, 480px); height: 30px; margin: 0 auto; border-radius: 18px; background: #2a2150; box-shadow: 0 0 0 4px #0b0d1f; }
+  #loader .fill { position: absolute; inset: 0 auto 0 0; width: 4%; border-radius: 18px; background: linear-gradient(#ff8a7a, #e2344a 50%, #8f1020); transition: width .25s ease; }
+  #loader .fill::after { content: ""; position: absolute; left: 8px; right: 8px; top: 5px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.35); }
+  #loader .runner { position: absolute; top: 50%; left: 4%; width: 52px; height: 40px; transform: translate(-50%, -58%); transition: left .25s ease;
+    background: url(assets/favicon.png) center / contain no-repeat; animation: hop .42s ease-in-out infinite alternate; }
+  @keyframes hop { from { margin-top: 0; } to { margin-top: -7px; } }
+  #loader .pct { margin-top: 18px; font-family: "Black Han Sans", sans-serif; font-size: 20px; color: #fff; }
+  #loader .tip { margin-top: 26px; min-height: 2.6em; max-width: 520px; color: #e9e4ff; font-size: clamp(15px, 3vw, 19px); transition: opacity .3s; }
+  #loader .tip b { color: #7ff0ff; font-weight: normal; }
+  #loader .zz { position: absolute; right: -6px; top: -24px; color: #cfe3ff; font-family: "Black Han Sans", sans-serif; font-size: 18px; animation: zz 1.6s ease-in-out infinite; }
+  @keyframes zz { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
   /* preload fonts so canvas text never falls back mid-game */
   .fontwarm { position: absolute; left: -9999px; font-size: 1px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="내 쿠션 내놔! Chapter 1 game"></canvas>
+<div id="loader" role="status" aria-live="polite">
+  <div>
+    <div class="logo">내 쿠션 <span>내놔!</span></div>
+    <div class="sub">쿠션을 찾으러 가는 중…</div>
+    <div class="track"><div class="fill"></div><div class="runner"><span class="zz">z</span></div></div>
+    <div class="pct">0%</div>
+    <div class="tip"></div>
+  </div>
+</div>
+<script>
+  // tiny loading screen API used by game.js (progress 0..1, then done)
+  window.LoaderUI = (() => {
+    const el = document.getElementById("loader"), fill = el.querySelector(".fill"), run = el.querySelector(".runner"), pct = el.querySelector(".pct"), tip = el.querySelector(".tip");
+    const touch = matchMedia("(pointer: coarse)").matches;
+    const TIPS = [
+      touch ? "<b>빨강 버튼</b>을 꾹 누르면 흡입, 톡 누르면 발사!" : "<b>X</b>를 꾹 누르면 흡입, 톡 누르면 발사!",
+      "빨아들인 도둑은 <b>구슬</b>이 되어 굴러가요. 한 번에 여럿 맞히면 콤보!",
+      touch ? "<b>보라 버튼</b> 슬라이딩은 보스의 점프와 돌진을 빠져나가요." : "<b>C</b> 슬라이딩은 보스의 점프와 돌진을 빠져나가요.",
+      "화면 끝으로 가면 <b>반대편</b>으로 나와요.",
+      "도둑은 6초쯤 지나면 탱크에서 <b>탈출</b>하려고 해요. 빨리 쏘세요!",
+      "보스전에서 쓰러지면 <b>그 자리에서</b> 다시 일어나요. 보스 체력은 그대로!",
+      "각 장 3번째 스테이지 어딘가에 <b>반송 도장</b>이 숨어 있어요.",
+      "냥이의 목표는 단 하나. <b>다시 낮잠 자기.</b>",
+    ];
+    let i = Math.floor(Math.random() * TIPS.length), shown = 0;
+    const next = () => { tip.style.opacity = 0; setTimeout(() => { tip.innerHTML = TIPS[i++ % TIPS.length]; tip.style.opacity = 1; }, 300); };
+    next(); const timer = setInterval(next, 3600);
+    return {
+      progress(k) { k = Math.max(shown, Math.min(1, k)); shown = k; const w = 4 + k * 96; fill.style.width = w + "%"; run.style.left = w + "%"; pct.textContent = Math.floor(k * 100) + "%"; },
+      done() { this.progress(1); clearInterval(timer); setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 500); }, 250); },
+    };
+  })();
+</script>
+<canvas id="game" aria-label="내 쿠션 내놔! 게임"></canvas>
 <div class="fontwarm"><span style="font-family:'Black Han Sans'">가</span><span style="font-family:'Do Hyeon'">가</span><span style="font-family:'Titan One'">A</span></div>
 <script src="assets/manifest.js"></script>
 <script src="story/script.js"></script>

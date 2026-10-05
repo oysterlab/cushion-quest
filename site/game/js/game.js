@@ -20,16 +20,40 @@
   // ---- Assets --------------------------------------------------------------
   const MAN = window.ASSET_MANIFEST || {};
   const SPR = {}, BG = {};
-  const loads = [];
-  function load(src) {
-    const im = new Image();
-    loads.push(new Promise(r => { im.onload = r; im.onerror = r; }));
-    im.src = src; return im;
+  // Assets come in packs: 0 = shared (cat, HUD, items, chapter-1 thieves, title), 1–6 = each chapter's thieves,
+  // boss, ledges, stage backgrounds and story paintings. Image objects exist up front; src is set when a pack loads.
+  const SHEET_CH = { shield: 2, button: 2, herald: 2, herald_down: 2, wetcoon: 3, foamgob: 3, washboss: 3, boxbun: 4, taggob: 4, appraiser: 4,
+    sheep: 5, bat: 5, knight: 5, guard: 6, pillowcoon: 6, king: 6, throne: 6, boss: 1, dog: 1 };
+  const SLAB_CH = { slab1: 1, slab2: 1, slab3: 1, slab4: 1, slab5: 1, slab_hedge: 2, slab_planter: 2, slab_marble: 2, slab_desk: 2, slab_laundry: 3, slab_tub: 3,
+    slab_gold: 4, slab_coin: 4, slab_moon: 5, slab_balcony: 5, slab_royal: 6, slab_throne: 6 };
+  function packOf(name, isBg) {
+    if (!isBg) return SHEET_CH[name] ?? SLAB_CH[name] ?? 0;
+    let m;
+    if ((m = /^bg(\d)_/.exec(name))) return +m[1];
+    if (/^bg\d$/.test(name) || /^end[12]$/.test(name)) return 1;
+    if ((m = /^c(\d)_/.exec(name))) return +m[1];
+    if (/^end_|^epilogue|^title_clear/.test(name)) return 6;
+    if (/^s\d$/.test(name)) return -1; // the story intro's paintings live in intro.html
+    return 0;
   }
+  const PACKS = {}; // ch -> { items: [{im, src, bytes}], state, done, bytes, got }
+  const addTo = (ch, im, src, bytes) => { (PACKS[ch] = PACKS[ch] || { items: [], state: "idle", bytes: 0, got: 0, done: 0 }).items.push({ im, src, bytes: bytes || 1 }); PACKS[ch].bytes += bytes || 1; };
   for (const [name, info] of Object.entries(MAN)) {
-    if (info.frames) SPR[name] = info.frames.map(([w, h], i) => ({ img: load(`assets/sprites/${name}_${i}.webp`), w, h }));
-    else if (info.src) BG[name] = load(info.src);
+    if (info.frames) SPR[name] = info.frames.map(([w, h], i) => { const im = new Image(); addTo(packOf(name, false), im, `assets/sprites/${name}_${i}.webp`, (info.bytes || [])[i] || 9000); return { img: im, w, h }; });
+    else if (info.src) { const ch = packOf(name, true); BG[name] = new Image(); if (ch >= 0) addTo(ch, BG[name], info.src, info.bytes || 260000); }
   }
+  function loadPack(ch) {
+    const pk = PACKS[ch]; if (!pk) return Promise.resolve();
+    if (pk.promise) return pk.promise;
+    pk.state = "loading";
+    pk.promise = Promise.all(pk.items.map(it => new Promise(r => {
+      const fin = () => { pk.got += it.bytes; pk.done++; r(); };
+      it.im.onload = fin; it.im.onerror = fin; it.im.src = it.src;
+    }))).then(() => { pk.state = "ready"; });
+    return pk.promise;
+  }
+  const packReady = ch => !PACKS[ch] || PACKS[ch].state === "ready";
+  const packProgress = chs => { let a = 0, b = 0; for (const c of chs) { const pk = PACKS[c]; if (pk) { a += pk.got; b += pk.bytes; } } return b ? a / b : 1; };
   const fr = (name, i) => (SPR[name] || [])[i];
   // white hit-flash version of a frame, built once on first use (ctx.filter is far too slow per frame)
   function flashOf(f) {
@@ -2143,7 +2167,7 @@
       Sound.sfx("start");
       const from = canContinue && game.menu ? (allClear ? LEVELS.findIndex(l => l.chapter === LEVELS[LEVELS.length - 1].chapter) : saved) : 0;
       if (from === 0) { if (canContinue && !params.has("stage")) { wipeTo(() => { location.href = "intro.html?replay"; }); return; } wipeTo(() => startIntermission(0)); }
-      else wipeTo(() => { game.deaths = 0; LEVELS[from].n === 1 ? playPanels(CHAPTERS[LEVELS[from].chapter].open, () => startIntermission(from)) : startIntermission(from); });
+      else wipeTo(() => { game.deaths = 0; whenReady(LEVELS[from].chapter, () => LEVELS[from].n === 1 ? playPanels(CHAPTERS[LEVELS[from].chapter].open, () => startIntermission(from)) : startIntermission(from)); });
     }
     game.tap = null;
   }
@@ -2200,7 +2224,7 @@
     if (t === 20) Sound.jingle("ready");
     if (t > 40 && t % 7 === 0 && t < 230) puff(-60 + (t - 40) * 5.6 - 30, 648, 1);
     updateParts();
-    if ((t > 270 || (t > 50 && anyPress())) && !game.wipe) wipeTo(() => startStage(game.interStage));
+    if ((t > 270 || (t > 50 && anyPress())) && !game.wipe) { const ch = LEVELS[game.interStage].chapter; if (packReady(ch)) wipeTo(() => startStage(game.interStage)); else whenReady(ch, () => startStage(game.interStage)); }
   }
   function drawInter() {
     const i = game.interStage, lv = LEVELS[i], t = game.interT;
@@ -2305,7 +2329,7 @@
     playPanels(end, () => {
       if (next >= LEVELS.length) { game.cleared = true; try { localStorage.setItem("cushion-clear", "1"); } catch (_) {} return startFinal(); }
       const nch = LEVELS[next].chapter;
-      playPanels(CHAPTERS[nch].open, () => startIntermission(next));
+      whenReady(nch, () => playPanels(CHAPTERS[nch].open, () => startIntermission(next)));
     });
   }
   function startEnding() { chapterEnd(LEVELS.findIndex(l => l.chapter === 1 && l.boss)); }
@@ -2363,6 +2387,35 @@
     if (t > 180 && Math.floor(t / 28) % 2) text("PRESS START", W / 2, H - 60, { size: 20, align: "center" });
   }
 
+  // ---- Waiting for a chapter pack -------------------------------------------
+  function whenReady(ch, fn) {
+    if (packReady(ch)) return fn();
+    loadPack(ch); game.scene = "loading"; game.loadCh = ch; game.loadFn = fn; game.loadT = 0; Sound.stopMusic();
+  }
+  function updateLoading() {
+    game.loadT++;
+    if (packReady(game.loadCh) && game.loadT > 20 && !game.wipe) { const fn = game.loadFn; game.loadFn = null; wipeTo(fn); }
+  }
+  function drawLoading() {
+    const k = packProgress([game.loadCh]), t = game.loadT;
+    ctx.fillStyle = "#120d26"; ctx.fillRect(0, 0, W, H);
+    text(`CHAPTER ${game.loadCh}`, W / 2, H / 2 - 90, { size: 22, align: "center", color: "#7ff0ff" });
+    text(CHAPTERS[game.loadCh].title, W / 2, H / 2 - 40, { size: 44, align: "center", font: KR, color: "#ffd23a", stroke: 10 });
+    drawLoadBar(W / 2 - 240, H / 2 + 20, 480, k, t);
+    text("다음 이야기를 불러오는 중…", W / 2, H / 2 + 136, { size: 24, align: "center", font: KR2, color: "#e9e4ff", stroke: 5 });
+  }
+  function drawLoadBar(x, y, w, k, t) { // a cushion-shaped bar with the cat's face riding the fill
+    const h = 30;
+    ctx.save(); ctx.fillStyle = "#0b0d1f"; roundRect(x - 4, y - 4, w + 8, h + 8, 18); ctx.fill();
+    ctx.fillStyle = "#2a2150"; roundRect(x, y, w, h, 15); ctx.fill();
+    if (k > 0) { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, "#ff8a7a"); g.addColorStop(0.5, "#e2344a"); g.addColorStop(1, "#8f1020");
+      ctx.fillStyle = g; roundRect(x, y, Math.max(h, w * k), h, 15); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.35)"; roundRect(x + 6, y + 4, Math.max(0, w * k - 12), 6, 3); ctx.fill(); }
+    ctx.restore();
+    drawSprite("hud_face", 0, x + w * k, y + h / 2 + 4 + Math.sin(t * 0.3) * 3, { center: true, scale: 0.8 });
+    text(`${Math.floor(k * 100)}%`, x + w, y + h + 34, { size: 18, align: "right", color: "#fff" });
+  }
+
   // ---- Transitions ---------------------------------------------------------
   function wipeTo(fn) { if (game.wipe) return; game.wipe = { t: 0, dur: 26, fn, phase: "close" }; }
   function updateWipe() {
@@ -2397,6 +2450,7 @@
         updateParts();
         break;
       case "ending": game.endT++; if (pressed.skip && !game.wipe && CUT) { game.dialog = null; CUT.i = CUT.panels.length; wipeTo(CUT.done); } break;
+      case "loading": updateLoading(); break;
       case "final": game.finalT++; if (game.finalT > 160 && pressed.start && !game.wipe) wipeTo(startTitle); break;
     }
     if (game.shake > 0) game.shake *= 0.86, game.shake < 0.3 && (game.shake = 0);
@@ -2413,12 +2467,13 @@
     ctx.save();
     if (game.shake) ctx.translate(rand(-game.shake, game.shake), rand(-game.shake, game.shake));
     switch (game.scene) {
-      case "boot": text("LOADING…", W / 2, H / 2, { size: 20, align: "center" }); break;
+      case "boot": break;
       case "title": drawTitle(); break;
       case "inter": drawInter(); break;
       case "play": drawPlay(); break;
       case "ending": drawEnding(); break;
       case "final": drawFinal(); break;
+      case "loading": drawLoading(); break;
     }
     ctx.restore();
     if (game.flash) { ctx.fillStyle = `rgba(255,255,255,${game.flash / 14})`; ctx.fillRect(0, 0, W, H); }
@@ -2457,7 +2512,21 @@
   }
 
   // ---- Boot ----------------------------------------------------------------
-  Promise.all([Promise.all(loads), document.fonts ? document.fonts.ready : 0, new Promise(r => setTimeout(r, 1500)).then(() => 0)].slice(0, 2)).then(() => {
+  const startCh = (() => {
+    const st = params.get("stage"); if (st != null) return LEVELS[clamp(+st - 1, 0, LEVELS.length - 1)].chapter;
+    if (params.has("chapter")) return clamp(+params.get("chapter") || 1, 1, 6);
+    if (params.has("new") || params.has("ending")) return 1;
+    return LEVELS[Math.min(saved, LEVELS.length - 1)].chapter;
+  })();
+  const firstPacks = [0, startCh];
+  const ui = window.LoaderUI;
+  const tick = setInterval(() => ui && ui.progress(packProgress(firstPacks)), 80);
+  function streamRest() { // remaining chapters, nearest first, one pack at a time
+    const order = [1, 2, 3, 4, 5, 6].filter(c => c !== startCh).sort((a, b) => ((a - startCh + 6) % 6) - ((b - startCh + 6) % 6));
+    order.reduce((pr, c) => pr.then(() => loadPack(c)), Promise.resolve());
+  }
+  Promise.all([Promise.all(firstPacks.map(loadPack)), document.fonts ? document.fonts.ready : 0]).then(() => {
+    clearInterval(tick); if (ui) ui.done(); streamRest();
     const st = params.get("stage");
     if (st != null) { game.deathsAtStart = 0; startStage(clamp(+st - 1, 0, LEVELS.length - 1)); }
     else if (params.has("chapter")) { // direct chapter entry (chapter select page): the chapter's opening panels, then its first stage
@@ -2475,6 +2544,7 @@
   window.__game = {
     game, perf, get parts() { return parts; }, get shots() { return shots; }, get P() { return P; }, get enemies() { return enemies; }, get boss() { return boss; }, get balls() { return balls; }, get items() { return items; },
     startStage, startEnding, startTitle, startIntermission,
+    whenReady, packReady, get packs() { return Object.fromEntries(Object.entries(PACKS).map(([k, v]) => [k, v.state])); },
     panels(ch, part = "open") { const c = CHAPTERS[ch]; playPanels(part === "open" || part === "end" || part === "epilogue" ? c[part] : c.after[part], startTitle); },
     killAll() { enemies.forEach(e => { e.gone = true; }); L && L.spawnQ.forEach(s => s.done = true); },
     damageBoss(n = 1) { // debug/QA: lands n "fair" hits, opening each boss's defence first
