@@ -27,7 +27,10 @@ window.LEVELS = [
       "####..###..####",
       "##....###....##",
     ],
-    spawns: [["bunny", 7, 0], ["goblin", 0, 15], ["raccoon", 14, 30], ["goblin", 11, 60], ["bunny", 3, 90], ["raccoon", 7, 120], ["goblin", 13, 150]],
+    // three waves: sock-throwing bunnies take the high roofs first, then reinforcements keep the pressure on
+    spawns: [["bunny", 7, 0], ["bunny", 1, 20], ["goblin", 4, 40], ["raccoon", 13, 60],
+             ["raccoon", 10, 480], ["goblin", 0, 500], ["goblin", 14, 520],
+             ["bunny", 13, 900], ["raccoon", 3, 920], ["raccoon", 11, 940]],
   },
   {
     chapter: 1, n: 4, dog: true, name: "성문 다리", en: "CASTLE BRIDGE", bg: "bg4", tiles: "slab4", music: "rooftop",
@@ -36,7 +39,9 @@ window.LEVELS = [
       "####.......####",
       "...#########...",
     ],
-    spawns: [["raccoon", 7, 0], ["bunny", 2, 15], ["bunny", 12, 30], ["goblin", 1, 50], ["raccoon", 13, 70], ["goblin", 5, 100], ["bunny", 9, 130], ["raccoon", 7, 160]],
+    spawns: [["raccoon", 7, 0], ["bunny", 2, 15], ["bunny", 12, 30], ["goblin", 1, 50], ["raccoon", 13, 70],
+             ["goblin", 5, 520], ["bunny", 9, 540], ["raccoon", 7, 560],
+             ["goblin", 2, 960], ["raccoon", 12, 980], ["bunny", 7, 1000]],
   },
   {
     chapter: 1, n: 5, name: "도둑 소굴", en: "THIEVES' DEN", bg: "bg5", bgScale: 1.2, tiles: "slab5", music: "boss", boss: true,
