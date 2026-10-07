@@ -178,7 +178,7 @@
 
   // ---- Game state ----------------------------------------------------------
   const game = {
-    scene: "boot", t: 0, stage: 0, score: 0, hp: 5, maxHp: 5, paused: false,
+    scene: "boot", t: 0, stage: 0, score: 0, hp: 3, maxHp: 3, paused: false,
     shake: 0, flash: 0, slow: 0, wipe: null, banner: null, dialog: null,
     nextLife: 30000, deaths: 0, bossSeen: {},
   };
@@ -195,7 +195,7 @@
   }
 
   // Generic body vs one-way platforms. Body: x (center), y (feet), vx, vy, hw, onGround, row, ignoreRow
-  function physics(b, grav = 0.6, maxFall = 11) {
+  function physics(b, grav = 0.6, maxFall = 16) {
     b.vy = Math.min(b.vy + grav, maxFall);
     const yp = b.y;
     b.x += b.vx; b.y += b.vy;
@@ -238,7 +238,7 @@
   function addScore(n, x, y, color) {
     game.score += n;
     if (x != null) popText(x, y, String(n), color || "#ffe14d");
-    if (game.score >= game.nextLife) { game.nextLife += 50000; heal(1, true); }
+
     if (game.score > hiScore) hiScore = game.score;
   }
 
@@ -259,21 +259,23 @@
   }
   // the paw-shaped mouth of the handheld vacuum
   const nozzle = () => ({ x: P.x + P.dir * 66, y: P.y - 47 });
-  const MAX_TANK = 5, BEAM = 180, JUMP = -14.9;
+  const MAX_TANK = 4, BEAM = 126, JUMP = -14.9; // a full jump clears one tier (164 px) with a little to spare: discrete apex ~170 px
   const HELP = params.has("help");                     // assist mode: more hearts, no escapes
-  const ESCAPE_T = 360, ESCAPE_WARN = 240;              // captured thieves try to escape after 6s (warning from 4s)
+  const ESCAPE_T = 330, ESCAPE_WARN = 190;              // the tank rattles from ~3.2 s and bursts at 5.5 s
+  const HURRY_BOSS_T = 100 * 60;
+  const hurryT = () => (40 + 5 * ((LEVELS[game.stage] || {}).chapter || 1)) * 60; // the alarm: 45 s in ch1 … 70 s in ch6     // the Wake-up Alarm comes for a cat that dawdles
   // per-sheet correction so every pose shows the cat at the same body size (measured by sprite area)
   const SHEET_SCALE = {}; // cat_b / cat_c are size-matched to cat_a in tools/process.py
 
   function inBeam(x, y, pad = 0) {
     const n = nozzle(), dx = (x - n.x) * P.dir;
-    return dx > -30 && dx < BEAM + pad && Math.abs(y - n.y) < 36 + dx * 0.2 + pad;
+    return dx > -30 && dx < BEAM + pad && Math.abs(y - n.y) < 34 + pad;
   }
 
   // One heart per hit. A hit knocks the cat back and gives a short invincibility; only the last heart
   // triggers the arcade "pop up and fall off the screen" death.
-  function hurtPlayer(from) {
-    if (P.state !== "normal" || P.inv > 0 || P.slideT > 0 || DEBUG && params.has("god")) return;
+  function hurtPlayer(from, low) {
+    if (P.state !== "normal" || P.inv > 0 || (P.slideT > 0 && low) || DEBUG && params.has("god")) return;
     if (boss && boss.hp <= 0) return; // the boss is going down: nothing can hurt the cat any more
     game.hp--; game.deaths++; game.heartHit = 24;
     P.sucking = false; Sound.suck(false); P.t = 0;
@@ -308,7 +310,7 @@
     }
     if (p.state === "hit") { // knocked back, then back in control with a blink
       physics(p); p.vx *= 0.9;
-      if (p.t > 22 && p.onGround) { p.state = "normal"; p.inv = 100; }
+      if (p.t > 22 && p.onGround) { p.state = "normal"; p.inv = 120; }
       return;
     }
     if (p.state === "respawn") {
@@ -333,7 +335,7 @@
     if (p.slideBuf > 0 && p.onGround && !p.slideT && !p.slideCd && !p.sucking && !p.shootQ) {
       p.slideBuf = 0;
       if (ctl.left) p.dir = -1; else if (ctl.right) p.dir = 1;
-      p.slideT = 24; p.slideCd = 40; Sound.sfx("throwp"); puff(p.x - p.dir * 20, p.y, 5);
+      p.slideT = 24; p.slideCd = 90; Sound.sfx("throwp"); puff(p.x - p.dir * 20, p.y, 5);
     }
     if (p.slideT > 0) {
       p.slideT--;
@@ -344,9 +346,9 @@
     }
     // horizontal
     if (p.doze > 0) { p.doze--; if (p.doze % 18 === 0) parts.push({ k: "text", x: p.x + 30, y: p.y - 120, vx: 0.4, vy: -0.7, life: 0, max: 40, str: "z", color: "#cfe3ff", size: 18 }); }
-    const accel = p.sucking ? 0.35 : 0.9, top = p.sucking ? 1.5 : p.doze > 0 ? 1.6 : 4.2;
-    if (ctl.left) { p.vx = Math.max(p.vx - accel, -top); if (!p.sucking) p.dir = -1; }
-    else if (ctl.right) { p.vx = Math.min(p.vx + accel, top); if (!p.sucking) p.dir = 1; }
+    const accel = 0.9, top = p.doze > 0 ? 1.6 : 4.2;
+    if (ctl.left) { p.vx = Math.max(p.vx - accel, -top); p.dir = -1; }
+    else if (ctl.right) { p.vx = Math.min(p.vx + accel, top); p.dir = 1; }
     else p.vx *= p.onGround ? 0.62 : 0.9;
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
     // jump / drop-through
@@ -364,7 +366,8 @@
 
     // vacuum / shoot: hold to suck, press again to throw what you caught
     if (press.fire) {
-      if (p.tank.length && p.shootQ === 0) { p.shootQ = p.tank.length; p.shootCd = 0; }
+      if (p.tank.length && p.shootQ === 0) { p.shootQ = p.tank.length; p.shootCd = 0; p.volley = p.tank.length;
+        if (p.volley >= 3) { popText(p.x, p.y - 170, `${p.volley}연발! BIG!`, "#ffd23a", 26); Sound.sfx("bonus"); } }
       else if (!p.tank.length) p.sucking = true;
     }
     if (!ctl.fire) p.sucking = false;
@@ -397,8 +400,8 @@
     if (item.type === "cloud") item = { ...item, type: "sheep" };
     const n = P ? nozzle() : { x: W / 2, y: FLOOR_Y - 50 };
     spawnEnemy(item.type, 0); const e = enemies[enemies.length - 1];
-    Object.assign(e, { x: clamp(n.x, 40, W - 40), y: n.y + 30, vx: vx ?? P.dir * 5, vy: -8, state: "popout", t: 0, drawScale: 0.25, dir: P.dir });
-    if (item.shield === false) e.shield = false;
+    Object.assign(e, { x: clamp(n.x, 40, W - 40), y: n.y + 30, vx: vx ?? P.dir * 8, vy: -9, state: "popout", t: 0, drawScale: 0.25, dir: P.dir });
+
     stars(n.x, n.y, 10); parts.push({ k: "ring", x: n.x, y: n.y, life: 0, max: 16, r: 14, color: "#ffe14d" });
     Sound.sfx("pop");
   }
@@ -409,7 +412,8 @@
       const [it] = P.tank.splice(out, 1);
       releaseFromTank(it);
       const e = enemies[enemies.length - 1]; if (e) e.angry = 360;
-      popText(P.x, P.y - 150, "탈출!", "#ff5a4e", 26); game.shake = Math.max(game.shake, 5); P.gulp = 10;
+      popText(P.x, P.y - 150, "펑! 탱크 과부하!", "#ff5a4e", 26); game.shake = Math.max(game.shake, 8); P.gulp = 10;
+      if (P.inv <= 0) hurtPlayer(P.x - P.dir); // the burst knocks the cat over (and spills the rest of the tank)
     }
     P.rattle = !HELP && P.tank.some(it => !["pillow", "paper", "water"].includes(it.type) && it.t >= ESCAPE_WARN);
     if (P.rattle && game.t % 14 === 0) Sound.sfx("tick");
@@ -417,8 +421,9 @@
 
   function fireBall() {
     const n = nozzle(), item = P.tank.pop(); if (!item) return;
+    const nv = Math.min(4, P.volley || 1), big = nv >= 3;
     balls.push({ type: item.type, x: n.x + P.dir * 12, y: n.y + 38, vx: P.dir * 11, vy: -2, hw: 34, R: 42, onGround: false, row: -1, ignoreRow: -1,
-      dir: P.dir, rot: 0, bounces: 0, life: 0, combo: 0, hits: 0, power: 1 });
+      dir: P.dir, rot: 0, bounces: 0, life: 0, combo: 0, hits: 0, power: big ? 2 : 1, big, lives: big ? 10 : nv, reach: [48, 60, 72, 96][nv - 1] });
     P.shootPose = 12; P.recoil = 10; P.vx -= P.dir * 1.6;
     Sound.sfx("shoot"); game.shake = Math.max(game.shake, 3);
     stars(n.x, n.y, 6); parts.push({ k: "ring", x: n.x, y: n.y, life: 0, max: 12, r: 12, color: "#fff4d6" }); puff(n.x, n.y, 4);
@@ -426,61 +431,78 @@
 
   // ---- Enemies -------------------------------------------------------------
   const front = e => (P.x - e.x) * e.dir > 0; // is the cat in front of this enemy?
+  // elites can't be vacuumed and take ball damage: 1 per normal ball (the ball bounces back), 2 per BIG ball
+  function eliteDef() {
+    return { elite: true, blocks: () => true,
+      onBubble(e, b) {
+        e.hp = e.hp ?? eliteHp();
+        const dmg = b.big ? 2 : 1;
+        if (e.hp > dmg) {
+          e.hp -= dmg; e.hitT = 16; stars(e.x, e.y - 60, 8); Sound.sfx("bossHit"); game.shake = Math.max(game.shake, 4);
+          popText(e.x, e.y - 120, b.big ? "쿵!" : "팅!", b.big ? "#ff9b3d" : "#cfd3ff", 22);
+          b.vx = -b.vx * 0.9; b.x += Math.sign(b.vx) * 24; b.dir = Math.sign(b.vx); b.bounces++; // a normal ball bounces off the elite
+          if (!game.eliteTip) { game.eliteTip = true; game.tip = { str: "단단한 녀석은 흡입 불가! 3마리 모은 BIG 구슬은 2배", t: 0 }; }
+          return false;
+        }
+      } };
+  }
+  const ROLE = { goblin: "A", raccoon: "B", wetcoon: "B", pillowcoon: "B", sheep: "B", shield: "B", boxbun: "B", guard: "B",
+    bunny: "S", button: "S", foamgob: "S", taggob: "S" };
+  const eliteHp = () => ((LEVELS[game.stage] || {}).chapter || 1) >= 6 ? 3 : 2;
   const EDEF = {
-    goblin:  { speed: 1.4, walk: [0, 1, 2, 1], stun: 3, hw: 26 },
-    raccoon: { speed: 2.1, walk: [0, 1, 2, 1], stun: 4, leap: 3, hw: 30 },
-    bunny:   { speed: 1.2, walk: [0, 1, 2, 1], stun: 4, thr: 3, hw: 26 },
-    // ch2: carries a quilted cushion as a shield. The bell can't pull it from the front —
-    // lure it into a charge, then grab it while it pants, or slip behind it. A bubble to the shield knocks it away.
-    shield:  { speed: 1.25, walk: [0, 1, 2, 1], stun: 5, hw: 30, ch: 2,
-      blocks: e => e.shield && front(e) && !["tired", "dazed", "pulled"].includes(e.state),
-      onBubble(e, b) { if (e.shield && b.dir === -e.dir && e.state !== "tired") { e.shield = false; e.state = "dazed"; e.t = -60; e.vx = b.dir * 3; e.vy = -5; stars(e.x, e.y - 60, 8); popText(e.x, e.y - 120, "방패 날아감!", "#ffd23a", 20); Sound.sfx("bossHit"); return false; } } },
+    goblin:  { speed: 2.1, walk: [0, 1, 2, 1], stun: 3, hw: 26 },
+    raccoon: { speed: 2.5, walk: [0, 1, 2, 1], stun: 4, leap: 3, hw: 30 },
+    bunny:   { speed: 1.7, walk: [0, 1, 2, 1], stun: 4, thr: 3, hw: 26, ranged: { every: 200, tele: 24, shot: "sock" } },
+    // elite: the cushion shield stops the vacuum outright — break it with balls (a BIG volley does double)
+    shield:  { speed: 1.7, walk: [0, 1, 2, 1], stun: 5, hw: 30, ch: 2, ...eliteDef() },
     // ch2: a padded button doll. Its zipper feet grip the floor, so it can only be pulled in while flipped over.
     // It rolls at you when level with the cat and flips when it hits a wall — or when a bubble bumps it.
-    button:  { speed: 0.9, walk: [0, 1], stun: 4, hw: 26, ch: 2,
-      blocks: e => !["flipped", "dazed", "pulled"].includes(e.state),
+    button:  { speed: 1.4, walk: [0, 1], stun: 4, hw: 26, ch: 2,
+      blocks: e => !["flipped", "dazed", "pulled", "roll"].includes(e.state),
       onBubble(e, b) { if (e.state !== "flipped" && e.state !== "dazed") { flipButton(e); return false; } } },
   };
-  // shield-like guards share one behaviour (front blocks the vacuum, charge -> panting opening, a ball to the front knocks it off)
-  const guardFront = (label) => ({
-    blocks: e => e.shield && front(e) && !["tired", "dazed", "pulled", "boast"].includes(e.state),
-    onBubble(e, b) { if (e.shield && b.dir === -e.dir && e.state !== "tired" && e.state !== "boast") { e.shield = false; e.type = "goblin"; e.state = "dazed"; e.t = -60; e.vx = b.dir * 3; e.vy = -5; stars(e.x, e.y - 60, 8); popText(e.x, e.y - 120, label, "#ffd23a", 20); Sound.sfx("bossHit"); return false; } },
-  });
+
   Object.assign(EDEF, {
-    // ch3: towel-wrapped raccoon — first pull only wrings out the water (water ammo), then it is an ordinary raccoon
-    wetcoon:  { speed: 1.0, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 3, peel: e => { e.type = "raccoon"; return "water"; }, peelText: "물방울 탄 GET!" },
-    // ch3: foam hat soaks up the first ball (or the first pull); a water ball goes straight through
-    foamgob:  { speed: 1.3, walk: [0, 1, 2, 1], stun: 5, hw: 26, ch: 3, peel: e => { e.type = "goblin"; burstFoam(e); return ""; },
-      onBubble(e, b) { if (b.type !== "water") { e.type = "goblin"; burstFoam(e); e.state = "dazed"; e.t = 0; return false; } } },
-    // ch4: hides in a box; peeks out when the cat comes close (only then can it be pulled or hit). A ball knocks the lid open.
-    boxbun:   { speed: 0.8, walk: [0, 1], stun: 4, hw: 30, ch: 4,
-      blocks: e => e.state === "boxed",
-      onBubble(e, b) { if (e.state === "boxed") { e.state = "peek"; e.t = -90; stars(e.x, e.y - 60, 6); Sound.sfx("pop"); return false; } } },
-    // ch4: price-tag goblin — the tag blocks the vacuum from the front, except while it boasts with the tag held high
-    taggob:   { speed: 1.3, walk: [0, 1, 2, 1], stun: 4, hw: 28, ch: 4, guard: true, charge: 4.8, tiredFrame: 3, chargeFrame: 5, ...guardFront("값표 날아감!") },
-    // ch5: lullaby sheep scatters sleepy notes; pulled in it becomes a cloud ball
-    sheep:    { speed: 0.9, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 5 },
+    // ch3: soapy raccoon — walks, then skids across the ledge in a sudden slide, then catches its breath
+    wetcoon:  { speed: 1.6, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 3, slips: true },
+    // ch3: foam-hat goblin blows a slow soap bubble that drifts after the cat (vacuum pops it)
+    foamgob:  { speed: 2.0, walk: [0, 1, 2, 1], stun: 5, hw: 26, ch: 3, aimFrame: 3, ranged: { every: 220, tele: 30, shot: "bubble" } },
+    // ch4 elite: a bunny in an iron-bound box — no vacuum gets in; break the box with balls
+    boxbun:   { speed: 1.2, walk: [0, 1], stun: 4, hw: 30, ch: 4, ...eliteDef() },
+    // ch4: price-tag goblin flings a tag flat across its ledge (jump it; vacuum it for ammo)
+    taggob:   { speed: 1.9, walk: [0, 1, 2, 1], stun: 4, hw: 28, ch: 4, aimFrame: 3, ranged: { every: 170, tele: 22, shot: "tag" } },
+
+    // ch5: lullaby sheep — stops and sings a fan of sleepy notes (dozing slows the cat; no heart lost)
+    sheep:    { speed: 1.4, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 5, aimFrame: 3, ranged: { every: 240, tele: 30, shot: "notes" } },
     // ch5: bat sleeps up high, swoops when the cat passes underneath, and can only be caught after it lands
     bat:      { speed: 0, walk: [0], stun: 4, hw: 26, ch: 5, fly: true,
       blocks: e => !["landed", "dazed", "pulled"].includes(e.state),
       onBubble(e) { if (!["landed", "dazed"].includes(e.state)) return false; } },
     // ch6: royal guard with a blanket cape — a faster shield goblin
-    guard:    { speed: 1.5, walk: [0, 1, 2, 1], stun: 5, hw: 30, ch: 6, guard: true, charge: 6.2, tiredFrame: 4, chargeFrame: 3, ...guardFront("망토 날아감!") },
+    // ch6 elite: royal guard — charges faster than the cat, can't be vacuumed
+    guard:    { speed: 2.0, walk: [0, 1, 2, 1], stun: 5, hw: 30, ch: 6, guard: true, charge: 6.2, tiredFrame: 4, chargeFrame: 3, ...eliteDef() },
+    // spawner: a loot sack that keeps spitting out thieves until a ball tears it open
+    sack:     { speed: 0, walk: [0], stun: 3, hw: 34,
+      blocks: () => true,
+      onBubble(e, b) { e.hp = (e.hp ?? 2) - (b.big ? 2 : b.power || 1); if (e.hp > 0) { e.hitT = 14; stars(e.x, e.y - 50, 8); popText(e.x, e.y - 110, "찌익!", "#ffd23a", 22); Sound.sfx("bossHit"); return false; } } },
     // ch6: raccoon under a load of pillows — first pull takes the pillows (big pillow ammo), then it runs fast
-    pillowcoon: { speed: 1.0, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 6, peel: e => { e.type = "raccoon"; e.angry = 900; return "pillow"; }, peelText: "베개 탄 GET!" },
+    // ch6: pillow-hauling raccoon stops and lobs a pillow at the cat — suck the pillow in for a big pillow ball
+    pillowcoon: { speed: 1.5, walk: [0, 1, 2, 1], stun: 4, hw: 32, ch: 6, aimFrame: 0, ranged: { every: 230, tele: 28, shot: "pillow" } },
   });
   EDEF.shield.guard = true; EDEF.shield.charge = 4.6; EDEF.shield.tiredFrame = 3; EDEF.shield.chargeFrame = 0;
+  EDEF.goblin.charge = 4.2; // basic thieves dash at cat speed
   function burstFoam(e) { for (let i = 0; i < 8; i++) parts.push({ k: "dust", x: e.x + rand(-20, 20), y: e.y - 90 + rand(-10, 10), vx: rand(-2, 2), vy: rand(-2, 0), life: 0, max: 30, r: rand(6, 12), color: "rgba(235,250,255,.9)" }); Sound.sfx("pop"); popText(e.x, e.y - 120, "거품 퐁!", "#bff4ff", 18); }
   function flipButton(e) { e.state = "flipped"; e.t = 0; e.vx = 0; e.vy = -6; e.onGround = false; Sound.sfx("land"); stars(e.x, e.y - 40, 6); }
-  function spawnEnemy(type, col, fromBoss) {
+  function spawnEnemy(type, col, fromBoss, tier) {
     const d = EDEF[type];
     enemies.push({ type, shield: !!d.guard, x: col * T + T / 2, y: -60 - rand(0, 40), vx: 0, vy: 0, hw: d.hw, dir: Math.random() < 0.5 ? -1 : 1,
       onGround: false, row: -1, ignoreRow: -1, state: "enter", t: 0, jumpCd: rand(90, 200), act: rand(80, 180), edge: false, anim: rand(0, 10), fromBoss });
+    if (tier != null && !d.fly) { const e = enemies[enemies.length - 1]; Object.assign(e, { y: TIER_Y[tier], row: tier, onGround: true, appear: 66, dir: col * T + T / 2 < W / 2 ? 1 : -1 }); }
   }
 
   function updateEnemy(e) {
-    const lv = LEVELS[game.stage], ramp = 1 + ((lv.n || 1) - 1) * 0.06 + ((lv.chapter || 1) - 1) * 0.08;
-    const d = EDEF[e.type], sp = Math.min(4, d.speed * ramp * (game.hurry ? 1.2 : 1) * (e.angry > 0 ? 1.3 : 1));
+    const lv = LEVELS[game.stage], ch = lv.chapter || 1, ramp = ch >= 3 ? 1.33 : 1;
+    const d = EDEF[e.type], sp = Math.min(4, d.speed * ramp * (e.angry > 0 ? 1.3 : 1)); // the alarm is the only late pressure; thieves don't speed up
     e.t++;
     if (e.angry > 0) e.angry--;
     if (e.state === "popout") { // bursting out of the nozzle: elastic grow, then a short daze
@@ -497,17 +519,17 @@
     // vacuum pull
     // once caught, a thief stays caught while the button is held (wider margin = no in/out flicker)
     const blocked = EDEF[e.type].blocks && EDEF[e.type].blocks(e);
-    if (blocked && P.sucking && P.state === "normal" && e.state !== "enter" && inBeam(e.x, e.y - 45)) {
+    if (blocked && P.sucking && P.state === "normal" && e.state !== "enter" && inBeam(e.x, e.y - 45)) { if (e.type === "sack" && e.blockT === 18) popText(e.x, e.y - 130, "너무 무거워! 구슬로 터뜨려!", "#cfd3ff", 20);
       e.blockT = (e.blockT || 0) + 1; P.beamStop = Math.min(P.beamStop ?? BEAM, Math.abs(e.x - nozzle().x) - 20);
       if (e.blockT % 10 === 1) { stars(e.x - e.dir * 10, e.y - 50, 3); Sound.sfx("tick"); }
       if (e.blockT === 20) popText(e.x, e.y - 120, e.type === "button" ? "꽉!" : "팅!", "#cfd3ff", 22);
     } else e.blockT = 0;
-    if (!blocked && P.sucking && P.state === "normal" && e.state !== "enter" && inBeam(e.x, e.y - 45, e.state === "pulled" ? 50 : 0)) {
+    if (!blocked && P.sucking && P.state === "normal" && e.state !== "enter" && inBeam(e.x, e.y - 45, e.state === "pulled" ? 12 : 0)) {
       e.state = "pulled"; e.pullT = (e.pullT || 0) + 1; e.dir = P.x > e.x ? 1 : -1;
       const n = nozzle(), dx = n.x - e.x, dy = n.y - (e.y - 45), dist = Math.hypot(dx, dy);
       // tug of war: first the thief digs its heels in and barely budges (feet on the ground, struggling),
       // then it loses its grip and the pull eases in hard — slow, slow, then *slurp*
-      const RESIST = e.type === "raccoon" ? 52 : 44;
+      const RESIST = e.type === "raccoon" ? 38 : 32;
       const k = clamp((e.pullT - RESIST) / 34, 0, 1);
       e.resist = 1 - k;
       if (e.pullT < RESIST) {
@@ -526,13 +548,17 @@
         return;
       }
       if (dist < 46 && e.pullT >= RESIST + 10) { // captured: slurped into the nozzle (only after the tug-of-war)
-        e.gone = true; P.tank.push({ type: e.type === "sheep" ? "cloud" : e.type, t: 0, shield: e.shield }); captureFx(e.type, n, enemyFrame(e), e.dir);
+        e.gone = true; P.tank.push({ type: e.type, t: 0 }); captureFx(e.type, n, enemyFrame(e), e.dir);
         popText(n.x, n.y - 44, P.tank.length >= MAX_TANK ? "FULL!" : "GET!", "#7ff0ff", 20);
       }
       return;
     }
     if (e.state === "pulled") { e.state = "dazed"; e.t = 0; e.pullT = Math.min(e.pullT, 14); e.resist = 0; }
-    if (e.state === "dazed") { physics(e); if (e.onGround) e.vx *= 0.8; if (e.t > 45 && e.onGround) { e.state = e.type === "boxbun" ? "boxed" : "walk"; e.t = 0; } return; }
+    if (e.state === "dazed") { physics(e); if (e.onGround) e.vx *= 0.8; if (e.t > 45 && e.onGround && !(Math.abs(e.x - P.x) < e.hw + P.hw && Math.abs(e.y - P.y) < 40)) { e.state = "walk"; e.t = 0; } return; }
+    if (e.state === "enter" && e.appear > 0) { // placed thieves blink in place, then get going
+      if (--e.appear === 0) { e.state = e.type === "sack" ? "sit" : "walk"; e.t = 0; puff(e.x, e.y, 4); }
+      return;
+    }
     if (e.state === "enter") {
       if (d.fly) { // bats flap in to a perch near the top of the screen
         e.perchY = e.perchY ?? (100 + Math.random() * 10); e.homeX = e.homeX ?? e.x; e.y += (e.perchY - e.y) * 0.06; e.vy = 0;
@@ -540,10 +566,11 @@
         return;
       }
       physics(e, 0.45, 7);
-      if (e.onGround) { const near = Math.abs(P.x - e.x) < 80 && Math.abs(P.y - e.y) < 60; e.state = e.type === "boxbun" ? "boxed" : near ? "dazed" : "walk"; e.t = 0; puff(e.x, e.y, 4); }
+      if (e.onGround) { const near = Math.abs(P.x - e.x) < 80 && Math.abs(P.y - e.y) < 60; e.state = near ? "dazed" : "walk"; e.t = 0; puff(e.x, e.y, 4); }
       return;
     }
     if (e.type === "bat") return updateBat(e);
+    if (e.type === "sack") return updateSack(e);
     if (e.type === "boxbun" && ["boxed", "peek"].includes(e.state)) return updateBox(e, sp);
     if (e.state === "throw") {
       physics(e);
@@ -551,21 +578,47 @@
       if (e.t > 30) { e.state = "walk"; e.t = 0; }
       return;
     }
-    if (e.state === "charge") { // guards rush forward behind their shield/tag/cape
-      e.anim += 0.4; e.vx = e.dir * (d.charge || 4.6);
+    if (e.state === "aim") { // ranged thieves: stop, telegraph, fire
+      e.vx = 0; physics(e);
+      if (e.t === 1) parts.push({ k: "text", x: e.x, y: e.y - 120, vx: 0, vy: -0.5, life: 0, max: d.ranged.tele, str: "!", color: "#ff9b3d", size: 22 });
+      if (e.t === d.ranged.tele) fireEnemyShot(e, d.ranged.shot, ch);
+      if (e.t > d.ranged.tele + 18) { e.state = "walk"; e.t = 0; }
+      return;
+    }
+    if (e.state === "slip") { // soapy skid
+      if (e.t < 0) { e.vx = 0; e.x += Math.sin(e.t * 1.5) * 1.5; physics(e); return; } // wobble tell
+      e.vx = e.dir * Math.min(4.6, sp * 2.8); if (e.t % 3 === 0) puff(e.x - e.dir * 20, e.y, 1, "rgba(225,245,255,.9)", 1);
+      const ahead = e.x + e.dir * (e.hw + 4);
+      if (e.t > 34 || ahead < e.hw || ahead > W - e.hw || !rowHasSpan(e.row, ahead - 2, ahead + 2)) { e.state = "rest"; e.t = 0; e.vx = 0; }
+      physics(e); return;
+    }
+    if (e.state === "rest") { e.vx = 0; physics(e); if (e.t > 28) { e.state = "walk"; e.t = 0; } return; }
+    if (e.state === "crouch") { // 1.4 s tell, then exactly one tier up or down
+      e.vx = 0; physics(e);
+      if (e.t % 24 === 1) parts.push({ k: "text", x: e.x + 44, y: e.y - 70, vx: 0, vy: e.hop > 0 ? -0.6 : 0.6, life: 0, max: 22, str: e.hop > 0 ? "↑" : "↓", color: "#ffd23a", size: 30 });
+      if (e.t >= 84) {
+        e.state = "walk"; e.t = 0;
+        if (e.hop > 0) { e.vy = JUMP; e.vx = 0; e.onGround = false; e.jumpPose = 30; }
+        else { e.ignoreRow = e.row; e.dropT = 16; e.vy = 1; e.onGround = false; }
+      }
+      return;
+    }
+    if (e.state === "charge" && e.t < 0) { e.vx = 0; physics(e); return; } // crouch before the dash
+    if (e.state === "charge") { // guards rush forward behind their shield/tag/cape; basic thieves dash
+      e.anim += 0.4; e.vx = e.dir * (d.charge || 4.6) * (ch >= 6 ? 1.15 : 1); // the last chapter's charges outrun the cat
       if (e.t % 5 === 0) puff(e.x - e.dir * 24, e.y, 1);
       const ahead = e.x + e.dir * (e.hw + 4);
-      if (e.t > 75 || ahead < e.hw || ahead > W - e.hw || !rowHasSpan(e.row, ahead - 2, ahead + 2)) { e.state = "tired"; e.t = 0; e.vx = 0; Sound.sfx("land"); }
+      if (e.t > (e.chargeT || 75) || ahead < e.hw || ahead > W - e.hw || !rowHasSpan(e.row, ahead - 2, ahead + 2)) { e.state = "tired"; e.t = 0; e.vx = 0; Sound.sfx("land"); }
       physics(e); return;
     }
     if (e.state === "tired") { // panting with the shield lowered — the opening
       e.vx = 0; physics(e);
-      if (e.t % 24 === 0) parts.push({ k: "text", x: e.x + e.dir * 24, y: e.y - 100, vx: 0.3, vy: -0.6, life: 0, max: 40, str: "헥", color: "#fff", size: 14 });
-      if (e.t > 125) { e.state = "walk"; e.t = 0; e.dir *= -1; }
+      if (e.t % 24 === 0 && e.type !== "goblin") parts.push({ k: "text", x: e.x + e.dir * 24, y: e.y - 100, vx: 0.3, vy: -0.6, life: 0, max: 40, str: "헥", color: "#fff", size: 14 });
+      if (e.t > (e.type === "goblin" ? 36 : 125)) { e.state = "walk"; e.t = 0; if (e.type !== "goblin") e.dir *= -1; }
       return;
     }
     if (e.state === "roll") { // button soldier bowls at the cat
-      e.vx = e.dir * 5.4; e.spin = (e.spin || 0) + e.dir * 0.35;
+      e.vx = e.dir * 5.4 * (ch >= 6 ? 1.33 : 1); e.spin = (e.spin || 0) + e.dir * 0.35;
       const ahead = e.x + e.dir * (e.hw + 4);
       if (ahead < e.hw || ahead > W - e.hw || e.t > 150) { flipButton(e); e.vx = -e.dir * 2; return; }
       if (!rowHasSpan(e.row, ahead - 2, ahead + 2)) { e.state = "fall"; }
@@ -576,43 +629,51 @@
 
     // walk / AI
     e.anim += sp * 0.09;
-    if (e.type === "taggob" && e.shield && e.onGround && (e.boastCd = (e.boastCd ?? rand(120, 200)) - 1) <= 0) { // proudly shows off its tag
-      e.state = "boast"; e.t = 0; e.boastCd = rand(200, 300); e.vx = 0;
+    const flat = d.ranged && ["sock", "tag"].includes(d.ranged.shot);
+    if (d.ranged && e.onGround && P.state === "normal" && (e.rangeT = (e.rangeT ?? rand(30, 50)) - 1) <= 0 && (!flat || Math.abs(P.y - e.y) < 40)) {
+      e.rangeT = d.ranged.every / (ch >= 5 ? 1.3 : 1); e.state = "aim"; e.t = 0; e.vx = 0; e.dir = P.x > e.x ? 1 : -1; return;
     }
-    if (e.state === "boast") { physics(e); if (e.t % 30 === 1) stars(e.x, e.y - 130, 3); if (e.t > 80) { e.state = "walk"; e.t = 0; } return; }
-    if (e.type === "sheep" && e.onGround && (e.singCd = (e.singCd ?? rand(90, 160)) - 1) <= 0) { e.state = "sing"; e.t = 0; e.singCd = rand(220, 320); }
-    if (e.state === "sing") {
-      e.vx = 0; physics(e);
-      if (e.t % 22 === 8 && e.t < 70) { shots.push({ k: "note", x: e.x + e.dir * 30, y: e.y - 80, vx: (P.x > e.x ? 1 : -1) * 1.8, vy: -0.4, life: 0, seed: rand(0, 6) }); Sound.sfx("blip"); }
-      if (e.t > 80) { e.state = "walk"; e.t = 0; }
-      return;
+    if (d.slips && e.onGround && (e.slipT = (e.slipT ?? rand(70, 140)) - 1) <= 0) { e.slipT = rand(120, 180); e.state = "slip"; e.t = -16; e.vx = 0; if (Math.random() < 0.6) e.dir = P.x > e.x ? 1 : -1; popText(e.x, e.y - 110, "!", "#7ff0ff", 22); return; }
+    if (e.type === "goblin" && e.onGround && Math.abs(P.y - e.y) < 30 && front(e) && Math.abs(P.x - e.x) < 300 && (e.dashCd = (e.dashCd ?? 120) - 1) <= 0 && P.state === "normal") {
+      e.state = "charge"; e.t = -12; e.vx = 0; e.chargeT = clamp(Math.abs(P.x - e.x) / 4.2 + 14, 24, 80); e.dashCd = 200; popText(e.x, e.y - 110, "!", "#ff9b3d", 24); Sound.sfx("sock"); return;
     }
-    if (e.onGround && d.guard && e.shield && Math.abs(P.y - e.y) < 30 && front(e) && Math.abs(P.x - e.x) < 330 && (e.chargeCd = (e.chargeCd || 60) - 1) <= 0 && P.state === "normal") {
-      e.state = "charge"; e.t = 0; e.chargeCd = 160; Sound.sfx("whistle"); popText(e.x, e.y - 120, "돌격!", "#ff9b3d", 20); return;
+
+    if (e.onGround && d.guard && e.shield && Math.abs(P.y - e.y) < 30 && front(e) && Math.abs(P.x - e.x) < 330 && (e.chargeCd = (e.chargeCd || 150) - 1) <= 0 && P.state === "normal") {
+      e.state = "charge"; e.t = -20; e.vx = 0; e.chargeCd = 160; Sound.sfx("whistle"); popText(e.x, e.y - 120, "돌격!", "#ff9b3d", 22); return;
     }
-    if (e.onGround && e.type === "button" && Math.abs(P.y - e.y) < 30 && Math.abs(P.x - e.x) < 420 && (e.rollCd = (e.rollCd || 90) - 1) <= 0 && P.state === "normal") {
+    if (e.onGround && e.type === "button" && Math.abs(P.y - e.y) < 30 && Math.abs(P.x - e.x) < 420 && (e.rollCd = (e.rollCd || 180) - 1) <= 0 && P.state === "normal") {
       e.dir = P.x > e.x ? 1 : -1; e.state = "roll"; e.t = 0; e.rollCd = 200; Sound.sfx("throwp"); return;
     }
     if (e.onGround) {
       e.vx = e.dir * sp;
+      const role = ROLE[e.type] || "B", stays = role === "S";
+      if (e.home == null) e.home = e.row;
       const ahead = e.x + e.dir * (e.hw + 2);
-      if (ahead < e.hw || ahead > W - e.hw) e.dir *= -1;
-      else if (!rowHasSpan(e.row, ahead - 2, ahead + 2)) {
-        if (!e.edge) { e.edge = true; if (e.row === 0 || Math.random() < 0.5) e.dir *= -1; }
+      if (ahead < e.hw || ahead > W - e.hw) e.dir *= -1; // solid side walls for thieves
+      else if (!rowHasSpan(e.row, ahead - 2, ahead + 2)) { // an open ledge end
+        if (!e.edge) {
+          e.edge = true;
+          const turn = role === "S" ? 0.99 : role === "A" ? 0.65 : 0.88, r = Math.random();
+          const far = e.x + e.dir * (T * 2 + e.hw); // is there ledge across a short gap?
+          const q = (r - turn) / (1 - turn); // the non-turn cases split: hop the gap / step down a tier / crouch to climb / turn anyway
+          if (stays || e.row === 0 || r < turn) e.dir *= -1;
+          else if (q < 0.35 && rowHasSpan(e.row, far - 8, far + 8)) { e.vy = -10.5; e.vx = e.dir * 4.6; e.onGround = false; e.jumpPose = 26; } // hop the gap (35 frames of air, ~160 px)
+          else if (q >= 0.35 && q < 0.55) { /* step off: walk on and drop one tier */ }
+          else if (q >= 0.55 && q < 0.75 && e.row + 1 < TIER_Y.length && rowHasSpan(e.row + 1, e.x - 12, e.x + 12)) { e.state = "crouch"; e.t = 0; e.hop = 1; e.vx = 0; return; }
+          else e.dir *= -1;
+        }
       } else e.edge = false;
-      // climb toward the player
-      if (--e.jumpCd <= 0) {
-        e.jumpCd = rand(100, 220) / (game.hurry ? 1.6 : 1);
-        const up = P.y < e.y - 80, r2 = e.row + 1;
-        if (up && r2 < TIER_Y.length && rowHasSpan(r2, e.x - 70, e.x + 70)) { e.vy = JUMP; e.vx = e.dir * sp * 0.6; e.onGround = false; e.jumpPose = 30; }
-        else if (e.type === "raccoon" && Math.random() < 0.5) { e.dir = P.x > e.x ? 1 : -1; e.vy = -10; e.vx = e.dir * 4.4; e.onGround = false; e.jumpPose = 30; }
-        else if (P.y > e.y + 80 && e.row > 0 && Math.random() < 0.5) { e.ignoreRow = e.row; e.dropT = 16; e.vy = 1; e.onGround = false; }
-        else if (Math.random() < 0.35) e.dir = P.x > e.x ? 1 : -1;
+      // floor changes: random, not aimed at the cat; one tier, after a 1.4 s crouch
+      if (!stays) {
+        const k = e.row === P.row ? 0.72 : 1;
+        const canUp = e.row + 1 < TIER_Y.length && rowHasSpan(e.row + 1, e.x - 12, e.x + 12);
+        if (e.row + 1 < TIER_Y.length && Math.random() < (2 / 3600) * k * (e.row === 0 ? 2.4 : 1.2)) e.wantUp = 900;
+        if (e.wantUp > 0) e.wantUp--;
+        if (canUp && e.wantUp > 0) { e.wantUp = 0; e.state = "crouch"; e.t = 0; e.hop = 1; e.vx = 0; return; }
+        if (e.row > 0 && Math.random() < (2.2 / 3600) * k) { e.state = "crouch"; e.t = 0; e.hop = -1; e.vx = 0; return; }
       }
-      // bunny throws socks when level with the player
-      if (e.type === "bunny" && --e.act <= 0 && Math.abs(P.y - e.y) < 30 && (P.x - e.x) * e.dir > 0 && Math.abs(P.x - e.x) < 560 && P.state === "normal") {
-        e.state = "throw"; e.t = 0; e.vx = 0; e.act = rand(120, 220); return;
-      }
+      // random reversals about every 7 s, facing the cat only half the time
+      if (Math.random() < 1 / 420) e.dir = Math.random() < 0.5 ? (P.x > e.x ? 1 : -1) : -e.dir;
     }
     if (e.dropT > 0 && --e.dropT === 0) e.ignoreRow = -1;
     if (e.jumpPose > 0) e.jumpPose--;
@@ -620,6 +681,19 @@
     if (e.onGround && e.ignoreRow >= 0 && e.row !== e.ignoreRow) e.ignoreRow = -1;
   }
 
+  function updateSack(e) {
+    e.state = "sit"; e.vx = 0; physics(e);
+    if (e.hitT > 0) e.hitT--; if (e.puffT > 0) e.puffT--;
+    e.spawnT = (e.spawnT ?? [150, 216, 282][Math.floor(rand(0, 3))]) - 1;
+    if (e.spawnT <= 0) {
+      e.spawnT = 330;
+      if (enemies.filter(q => q.state !== "dead").length < 10 && P.state === "normal") {
+        e.made = (e.made || 0) + 1; spawnEnemy(L.sack && e.made % 2 ? L.sack : "goblin", 0); const n = enemies[enemies.length - 1];
+        Object.assign(n, { x: e.x, y: e.y - 40, vx: rand(-3, 3) || 2, vy: -8, state: "popout", t: 0, drawScale: 0.25, dir: P.x > e.x ? 1 : -1 });
+        e.puffT = 16; puff(e.x, e.y - 60, 8); Sound.sfx("pop");
+      }
+    }
+  }
   function updateBox(e, sp) {
     physics(e);
     if (e.state === "boxed") {
@@ -651,7 +725,7 @@
   }
   function killEnemy(e, ball) {
     e.state = "dead"; e.t = 0; e.vx = Math.sign(ball.vx || 1) * rand(2, 4); e.vy = -9; e.rot = 0;
-    ball.combo++; ball.hits = ball.combo; ball.power = ball.combo > 0 ? 2 : 1;
+    ball.combo++; ball.hits = ball.combo;
     const pts = Math.min(200 * Math.pow(2, ball.combo - 1), 12800);
     addScore(pts, e.x, e.y - 90);
     if (ball.combo >= 2) popText(e.x, e.y - 122, `${ball.combo} COMBO!`, "#ff7ad9", 22);
@@ -671,12 +745,12 @@
     }
     for (const e of enemies) {
       if (e.gone || ["dead", "enter", "popout"].includes(e.state)) continue;
-      const reach = b.type === "pillow" ? 84 : 56; // pillow balls are big and sweep wide
+      const reach = Math.max(b.type === "pillow" ? 84 : 0, b.reach || 56); // reach grows with the volley size
       if (Math.abs(e.x - b.x) < reach && Math.abs((e.y - 45) - (b.y - 36)) < reach + 4) {
         if (e.skipBall === b) continue;
         const def = EDEF[e.type];
         b.dir = Math.sign(b.vx) || b.dir;
-        if (b.type !== "cloud" && def.onBubble && def.onBubble(e, b) === false) { e.skipBall = b; continue; } // shield knocked off / button flipped / foam popped
+        if (!(b.big && !def.elite && e.type !== "sack") && def.onBubble && def.onBubble(e, b) === false) { e.skipBall = b; continue; } // cloud and BIG balls punch through shields, foam and lids // shield knocked off / button flipped / foam popped
         killEnemy(e, b);
       }
     }
@@ -685,7 +759,7 @@
       if (boss.hit(b)) { b.gone = true; stars(b.x, b.y - 36, 14); dropItem(b.x, b.y - 40); return; }
       b.vx = -b.vx * 0.8; b.x += Math.sign(b.vx) * 30; b.bounces++; // deflected by a shield
     }
-    if (b.bounces >= 2 || b.life > 260) {
+    if (b.bounces >= (b.lives || 2) || b.life > (b.big ? 520 : 260)) {
       b.gone = true; Sound.sfx("pop"); stars(b.x, b.y - 36, 12);
       addScore(100, b.x, b.y - 70); dropItem(b.x, b.y - 40);
     }
@@ -694,7 +768,7 @@
   // ---- Items ---------------------------------------------------------------
   const ITEM_PTS = [100, 300, 200, 500, 400, 150, 700, 1000];
   function dropItem(x, y) {
-    const heart = game.hp < game.maxHp && Math.random() < 0.07;
+    const heart = false; // no heart drops: hearts are a chapter-long budget
     const k = heart ? 8 : Math.random() < 0.08 ? 7 : Math.floor(rand(0, 7));
     items.push({ k, x: clamp(x, 40, W - 40), y, vx: rand(-1.5, 1.5), vy: -6, hw: 24, onGround: false, row: -1, ignoreRow: -1, life: 0, bob: rand(0, 6) });
   }
@@ -709,17 +783,55 @@
     }
   }
 
+  function fireEnemyShot(e, kind, ch) {
+    const fast = ch >= 5 ? 1.25 : ch >= 3 ? 1.12 : 1;
+    if (kind === "sock") { shots.push({ k: "sock", x: e.x + e.dir * 40, y: e.y - 58, vx: e.dir * 4.8 * fast, vy: 0, rot: 0, life: 0 }); Sound.sfx("sock"); }
+    if (kind === "tag") { shots.push({ k: "tag", x: e.x + e.dir * 40, y: e.y - 46, vx: e.dir * 6.2 * fast, vy: 0, rot: 0, life: 0, enemy: true }); Sound.sfx("sock"); }
+    if (kind === "bubble") { if (shots.filter(q => q.k === "bubble").length >= 3) return; shots.push({ k: "bubble", x: e.x + e.dir * 34, y: e.y - 96, vx: e.dir * 1.2, vy: -0.4, rot: 0, life: 0, seed: rand(0, 6) }); Sound.sfx("pop"); }
+    if (kind === "notes") { for (let i = 0; i < 3; i++) shots.push({ k: "note", x: e.x + e.dir * 30, y: e.y - 80 + i * 10, vx: e.dir * (1.6 + i * 0.5) * fast, vy: -0.5 + i * 0.4, life: 0, seed: rand(0, 6) }); Sound.sfx("blip"); }
+    if (kind === "pillow") { const sx = e.x + e.dir * 30, sy = e.y - 110, air = 52, tx = P.x, ty = P.y - 45;
+      shots.push({ k: "pillow", x: sx, y: sy, vx: (tx - sx) / air, vy: (ty - sy - 0.5 * 0.32 * air * air) / air, rot: 0, life: 0 }); Sound.sfx("throwp"); }
+  }
+
+  // ---- Hurry-up chaser: the Wake-up Alarm ----------------------------------
+  function updateChaser(c) {
+    c.t++;
+    if (c.t % 465 === 0) { c.sp += 0.72; popText(c.x, c.y - 90, "따르릉!!", "#ff5a4e", 22); }
+    let dx = P.x - c.x; if (dx > W / 2) dx -= W; else if (dx < -W / 2) dx += W; // wraps like the cat
+    const dy = P.y - 50 - c.y, d = Math.hypot(dx, dy) || 1;
+    c.vx += (dx / d * c.sp - c.vx) * 0.08; c.vy += (dy / d * c.sp - c.vy) * 0.08;
+    c.x += c.vx; c.y += c.vy; if (Math.abs(c.vx) > 0.2) c.dir = Math.sign(c.vx);
+    if (c.t > 90) { if (c.x < -30) c.x += W + 60; else if (c.x > W + 30) c.x -= W + 60; }
+    if (c.t % 50 === 0) Sound.sfx("tick");
+    if (P.sucking && P.state === "normal" && inBeam(c.x, c.y) && c.t % 40 === 0) popText(c.x, c.y - 80, "꿈쩍도 안 해!", "#cfd3ff", 20);
+    if (P.state === "normal" && Math.hypot(P.x - c.x, (P.y - 50) - c.y) < 48) {
+      hurtPlayer(c.x);
+      if (P.state !== "normal") { c.gone = true; L.chaser = null; L.fightT = 0; game.hurry = false; Sound.setTempo(1); stars(c.x, c.y, 10); popText(c.x, c.y - 60, "따르릉…", "#ffd23a", 22); return; }
+    }
+    if (game.phase === "clear" || (boss && boss.hp <= 0)) { c.gone = true; L.chaser = null; stars(c.x, c.y, 10); }
+  }
+  function drawChaser(c) {
+    const near = Math.hypot(P.x - c.x, P.y - 50 - c.y) < 220, f = near ? 3 : 1 + Math.floor(c.t / 8) % 2, sh = near ? rand(-2, 2) : 0;
+    if (fr("alarm", 0)) drawSprite("alarm", f, c.x + sh, c.y + 46, { flip: c.dir > 0, scale: 0.9 });
+    else { ctx.save(); ctx.fillStyle = "#e2344a"; ctx.beginPath(); ctx.arc(c.x, c.y, 30, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#fff6e6"; ctx.beginPath(); ctx.arc(c.x, c.y, 20, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  }
+
   // ---- Projectiles (socks, pillows) & shockwaves --------------------------
   function updateShot(s) {
     s.life++;
     if (s.k === "sock") { s.x += s.vx; s.rot += 0.3; if (s.x < -20 || s.x > W + 20) s.gone = true; }
     if (s.k === "note") {
       s.x += s.vx; s.y += s.vy + Math.sin(s.life * 0.12 + s.seed) * 0.8; if (s.life > 300 || s.x < -20 || s.x > W + 20) s.gone = true;
-      if (P.state === "normal" && !P.slideT && Math.abs(s.x - P.x) < 34 && Math.abs(s.y - (P.y - 50)) < 50) { s.gone = true; P.doze = 70; Sound.sfx("blip"); popText(P.x, P.y - 150, "꾸벅…", "#cfe3ff", 22); }
+      if (P.state === "normal" && !P.slideT && Math.abs(s.x - P.x) < 34 && Math.abs(s.y - (P.y - 50)) < 50) { s.gone = true; P.doze = 120; Sound.sfx("blip"); popText(P.x, P.y - 150, "꾸벅…", "#cfe3ff", 22); }
       if (P.sucking && P.state === "normal" && inBeam(s.x, s.y)) { s.gone = true; Sound.sfx("pop"); }
       return;
     }
     if (s.k === "paper") { s.y += 1.25; s.x += Math.sin(s.life * 0.06 + s.seed) * 2.2; s.rot = Math.sin(s.life * 0.08 + s.seed) * 0.7; if (s.y > FLOOR_Y) { s.gone = true; puff(s.x, FLOOR_Y, 2); } }
+    if (s.k === "bubble") { // drifts after the cat, wobbling; pops after a while
+      s.vx = clamp(s.vx + Math.sign(P.x - s.x) * 0.035, -1.9, 1.9); s.vy = clamp(s.vy + Math.sign(P.y - 60 - s.y) * 0.02, -1, 1);
+      s.x += s.vx; s.y += s.vy + Math.sin(s.life * 0.1 + s.seed) * 0.6;
+      if (s.life > 380) { s.gone = true; puff(s.x, s.y, 5, "rgba(225,245,255,.9)"); Sound.sfx("pop"); return; }
+    }
     if (s.k === "tag") { s.x += s.vx; s.rot = Math.sin(s.life * 0.3) * 0.3; if (s.x < -30 || s.x > W + 30) s.gone = true; }
     if (s.k === "pillow" || s.k === "coin") {
       s.vy += 0.32; s.x += s.vx; s.y += s.vy; s.rot += 0.12;
@@ -748,16 +860,17 @@
     }
   }
   function updateWave(w) {
-    w.x += w.dir * (w.k === "foam" ? 5.2 : 7); w.life++;
+    w.x += w.dir * (w.k === "foam" ? 5.2 : 5); w.life++;
+    if (w.max && w.life > w.max) { w.gone = true; puff(w.x, FLOOR_Y, 3); return; }
     if (w.life % 3 === 0) puff(w.x, FLOOR_Y, 2, w.k === "foam" ? "rgba(225,245,255,.9)" : "rgba(230,210,180,.85)", 1.2);
     if (w.x < -40 || w.x > W + 40) w.gone = true;
-    if (P.state === "normal" && P.onGround && P.row === 0 && Math.abs(P.x - w.x) < 38) hurtPlayer(w.x);
+    if (P.state === "normal" && P.onGround && P.row === 0 && Math.abs(P.x - w.x) < 38) hurtPlayer(w.x, true);
   }
 
   // ---- Boss: 도둑 두목 빅고블 ---------------------------------------------------
   function makeBoss() {
     const b = {
-      x: 740, y: -320, vx: 0, vy: 0, dir: -1, hp: 12, maxHp: 12, state: "wait", t: 0, inv: 0, frame: 0,
+      x: 740, y: -320, vx: 0, vy: 0, dir: -1, hp: 6, maxHp: 6, state: "wait", t: 0, inv: 0, frame: 0,
       lastSummon: -999, act: 0, hitFlash: 0, talkCd: 0,
       name: "빅고블", portrait: ["boss", 0, 0.55, 92],
       hittable() { return ["taunt", "walk", "guard", "crouch", "leap", "recover", "stunned", "throw", "summon", "hurt"].includes(this.state) && this.inv <= 0; },
@@ -770,10 +883,10 @@
           if (this.talkCd <= 0 && BL().guard) { say(BL().guard, this); this.talkCd = 300; }
           return false;
         }
-        let dmg = (combo ? 2 : 1) * (stunned ? 2 : 1);
+        let dmg = stunned ? 2 : 1;
         if (this.state === "guard") { dmg = 1; popText(this.x, this.y - 330, "GUARD BREAK!", "#ffd23a", 26); }
         const before = this.hp;
-        this.hp = Math.max(0, this.hp - dmg); this.inv = 30; this.hitFlash = 14; Sound.sfx("bossHit"); game.shake = 9 + dmg * 2;
+        this.hp = Math.max(0, this.hp - dmg); this.inv = 40; this.hitFlash = 14; Sound.sfx("bossHit"); game.shake = 9 + dmg * 2;
         addScore(1000 * dmg, this.x, this.y - 290, "#ff9b3d");
         if (dmg > 1) popText(this.x, this.y - 330, `×${dmg} CRITICAL!`, "#ff7ad9", 26);
         if (this.hp <= 0) { this.state = "dying"; this.t = 0; game.slow = 60; Sound.stopMusic(); Sound.suck(false); if (BL().defeat) say(BL().defeat, this); return true; }
@@ -793,13 +906,13 @@
   function makeHerald() {
     return {
       kind: "herald", name: "왕의 전령", portrait: ["herald", 0, 0.62, 62], talkH: 170,
-      x: W + 120, y: 120, vx: 0, vy: 0, dir: -1, hp: 9, maxHp: 9, state: "wait", t: 0, inv: 0, frame: 0, hitFlash: 0, talkCd: 0,
+      x: W + 120, y: 120, vx: 0, vy: 0, dir: -1, hp: 6, maxHp: 6, state: "wait", t: 0, inv: 0, frame: 0, hitFlash: 0, talkCd: 0,
       lastSummon: -999, dives: 0, aimX: W / 2,
       hittable() { return this.state === "stuck" && this.inv <= 0; },
       box(b) { return Math.abs(this.x - b.x) < 96 && b.y > this.y - 170 && b.y < this.y + 20; },
       hit(ball) {
-        const dmg = ball.power;
-        this.hp = Math.max(0, this.hp - dmg); this.inv = 8; this.hitFlash = 14; Sound.sfx("bossHit"); game.shake = 8 + dmg * 2;
+        const dmg = 1;
+        this.hp = Math.max(0, this.hp - dmg); this.inv = 40; this.hitFlash = 14; Sound.sfx("bossHit"); game.shake = 8 + dmg * 2;
         addScore(1000 * dmg, this.x, this.y - 200, "#ff9b3d");
         if (dmg > 1) popText(this.x, this.y - 240, `×${dmg} CRITICAL!`, "#ff7ad9", 26);
         if (this.hp <= 0) { this.state = "dying"; this.t = 0; game.slow = 60; Sound.stopMusic(); Sound.suck(false); if (HL().defeat) say(HL().defeat, this); return true; }
@@ -845,7 +958,7 @@
       case "dive":
         b.frame = 3; b.vy = Math.min(b.vy + 1.4, 26); b.y += b.vy;
         if (b.retarget && b.y > 220) { b.retarget = false; b.x += clamp(P.x - b.x, -30, 30); b.shadowX = b.x; popText(b.x, b.y - 160, "앗, 저기다!", "#fff", 20); }
-        if (P.state === "normal" && Math.abs(P.x - b.x) < 58 && P.y > b.y - 160 && P.y - 90 < b.y) hurtPlayer(b.x);
+        if (P.state === "normal" && Math.abs(P.x - b.x) < 58 && P.y > b.y - 160 && P.y - 90 < b.y) hurtPlayer(b.x, true);
         if (b.y >= FLOOR_Y) {
           b.y = FLOOR_Y; b.state = "stuck"; b.t = 0; b.dives++; game.shake = 16; Sound.sfx("slam");
           puff(b.x, b.y, 16, "rgba(230,210,180,.9)", 5); parts.push({ k: "ink", x: b.x, y: FLOOR_Y + 4, life: 0, max: 300 });
@@ -900,7 +1013,7 @@
   }
   function bossDamage(b, dmg, top) {
     const Lb = BX(b.lines);
-    b.hp = Math.max(0, b.hp - dmg); b.inv = 10; b.hitFlash = 14; b.flinch = 18; Sound.sfx("bossHit"); game.shake = 8 + dmg * 2;
+    dmg = 1; b.hp = Math.max(0, b.hp - dmg); b.inv = 40; b.hitFlash = 14; b.flinch = 18; Sound.sfx("bossHit"); game.shake = 8 + dmg * 2;
     addScore(1000 * dmg, b.x, b.y - top, "#ff9b3d");
     if (dmg > 1) popText(b.x, b.y - top - 40, `×${dmg} CRITICAL!`, "#ff7ad9", 26);
     if (b.hp <= 0) { b.state = "dying"; b.t = 0; game.slow = 60; Sound.stopMusic(); Sound.suck(false); say(Lb.defeat, b); return; }
@@ -908,7 +1021,7 @@
     else if (b.talkCd <= 0 && Lb.hurt) { say(pick(Lb.hurt), b); b.talkCd = 240; }
   }
   function bossDeflect(x, y, msg) { Sound.sfx("tick"); stars(x, y, 6); popText(x, y - 50, msg || "팅!", "#cfd3ff", 26); }
-  function bossContact(b, hw, h) { if (P.state === "normal" && Math.abs(P.x - b.x) < hw && P.y > b.y - h && P.y - 90 < b.y) hurtPlayer(b.x); }
+  function bossContact(b, hw, h) { if (P.state === "normal" && Math.abs(P.x - b.x) < hw && P.y > b.y - h && P.y - 90 < b.y) hurtPlayer(b.x, true); }
   function bossSummon(b, list) {
     if (b.t === 10) { Sound.sfx("whistle"); say(pick(BX(b.lines).summon), b); b.talkCd = 200; }
     if (b.t === 40) list.forEach(([type, col]) => spawnEnemy(type, col, true));
@@ -952,18 +1065,19 @@
   // Towel armour makes every ball bounce ("뽀송!") — except a WATER ball, which soaks the towels off.
   // Wet-laundry raccoons are the water supply; he calls more whenever the cat has none.
   function makeWash() {
-    return bossCore({ kind: "wash", lines: "boss3", sheet: "washboss", name: "뽀송너굴", portrait: ["washboss", 3, 0.45, 100], hp: 10, maxHp: 10,
+    return bossCore({ kind: "wash", lines: "boss3", sheet: "washboss", name: "뽀송너굴", portrait: ["washboss", 3, 0.45, 100], hp: 8, maxHp: 8,
       armor: true, bareT: 0, top: 250, talkH: 300, fIdle: 0, fDrop: 6, fDying: 4, fDown: 5, music: "boss", calm: "laundry",
-      tip: "젖은빨래 너구리를 빨아 물방울 탄! 수건 갑옷에 맞혀!",
+      tip: "수건 갑옷은 3마리 모아 쏜 BIG 구슬로 벗겨!",
       hittable() { return !["dying", "down"].includes(this.state) && this.inv <= 0; },
       box(b) { return Math.abs(this.x - b.x) < 104 && b.y > this.y - 240 && b.y < this.y + 20; },
       hit(ball) {
         const Lb = BX(this.lines);
         if (this.armor) {
-          if (ball.type !== "water") {
-            bossDeflect(this.x + Math.sign(ball.x - this.x) * 70, this.y - 130, "뽀송!");
+          this.armorHp = (this.armorHp ?? 3) - (ball.big ? 3 : 1);
+          if (this.armorHp > 0) {
+            bossDeflect(this.x + Math.sign(ball.x - this.x) * 70, this.y - 130, `뽀송! (${3 - this.armorHp}/3)`);
             if (this.talkCd <= 0 && Lb.guard) { say(Lb.guard, this); this.talkCd = 320; }
-            if (!game.washHint) { game.washHint = true; game.tip = { str: "보통 구슬은 튕겨! 물방울 탄이 필요해", t: 0 }; }
+            if (!game.washHint) { game.washHint = true; game.tip = { str: "수건은 구슬 3발, BIG 구슬이면 한 방!", t: 0 }; }
             return false;
           }
           this.armor = false; this.bareT = 480; this.state = "bare"; this.t = 0; game.shake = 12; Sound.sfx("explode");
@@ -993,20 +1107,18 @@
         b.frame = 2; b.x += b.dir * (p2 ? 8 : 7); if (b.t % 4 === 0) parts.push({ k: "dust", x: b.x - b.dir * 60, y: b.y - rand(20, 160), vx: -b.dir * 2, vy: rand(-1, 1), life: 0, max: 24, r: rand(8, 14), color: "rgba(225,245,255,.85)" });
         if (b.x <= 130 || b.x >= W - 130) { b.state = "dizzy"; b.t = 0; game.shake = 12; Sound.sfx("slam"); stars(b.x, b.y - 200, 8); } break;
       case "dizzy": b.frame = 4; if (b.t > 70) chooseWash(); break;
-      case "summon": b.frame = 0; bossSummon(b, [["wetcoon", P.x < W / 2 ? 12 : 2]].concat(alive() < 1 ? [["goblin", 7]] : [])); if (b.t > 70) chooseWash(); break;
+      case "summon": b.frame = 0; bossSummon(b, [["goblin", P.x < W / 2 ? 12 : 2], ["wetcoon", P.x < W / 2 ? 13 : 1]].concat(alive() < 1 ? [["goblin", 7]] : [])); if (b.t > 70) chooseWash(); break;
       case "bare": // towels gone: shy, shuffles away — every ball hurts now
         b.frame = b.flinch > 0 ? 4 : 3; b.dir = P.x > b.x ? -1 : 1; b.x += b.dir * 0.7;
         if (b.bareT % 60 === 0 && b.bareT < 200) popText(b.x, b.y - 270, "…추워!", "#bff4ff", 20);
         if (--b.bareT <= 0) { b.state = "dress"; b.t = 0; } break;
-      case "dress": b.frame = 0; if (b.t === 1) { b.armor = true; puff(b.x, b.y - 100, 14, "rgba(235,250,255,.95)", 4); say(BX(b.lines).armorOn, b); b.talkCd = 200; } if (b.t > 40) chooseWash(); break;
+      case "dress": b.frame = 0; if (b.t === 1) { b.armor = true; b.armorHp = 3; puff(b.x, b.y - 100, 14, "rgba(235,250,255,.95)", 4); say(BX(b.lines).armorOn, b); b.talkCd = 200; } if (b.t > 40) chooseWash(); break;
     }
     b.x = clamp(b.x, 120, W - 120);
     if (["walk", "spin", "foam", "crouch", "taunt"].includes(b.state) && P.row === 0) bossContact(b, 88, 230);
   }
   function chooseWash() {
     const b = boss; b.t = 0;
-    const water = alive("wetcoon") > 0 || hasAmmo("water");
-    if (!water && game.t - b.lastSummon > 150) { b.state = "summon"; b.lastSummon = game.t; return; }
     if (alive() < 2 && game.t - b.lastSummon > 320) { b.state = "summon"; b.lastSummon = game.t; return; }
     const r = Math.random();
     b.state = r < 0.38 ? "foam" : r < 0.68 ? "crouch" : r < 0.9 ? "walk" : "taunt";
@@ -1067,7 +1179,7 @@
         b.frame = b.t < 18 ? 6 : 1;
         if (b.t === 18) { shots.push({ k: "tag", x: b.x + b.dir * 70, y: FLOOR_Y - 46, vx: b.dir * 4.6, vy: 0, rot: 0, life: 0 }); Sound.sfx("sock"); }
         if (b.t > 50) chooseAppraiser(); break;
-      case "summon": b.frame = 6; bossSummon(b, [["boxbun", 3], ["goblin", 12]].concat(p2 ? [["taggob", 7]] : [])); if (b.t > 70) chooseAppraiser(); break;
+      case "summon": b.frame = 6; bossSummon(b, [["taggob", P.x < W / 2 ? 12 : 2], ["goblin", P.x < W / 2 ? 13 : 1]].concat(p2 ? [["goblin", 7]] : [])); if (b.t > 70) chooseAppraiser(); break;
     }
   }
   function chooseAppraiser() {
@@ -1095,16 +1207,16 @@
   // Helmet on, balls only ring his lullaby bell. Two rings (or one cloud ball) stop the bell:
   // he pulls the helmet off to yawn — that's the opening.
   function makeKnight() {
-    return bossCore({ kind: "knight", lines: "boss5", sheet: "knight", name: "몽실", portrait: ["knight", 3, 0.55, 86], hp: 9, maxHp: 9, x: W + 140, y: FLOOR_Y,
+    return bossCore({ kind: "knight", lines: "boss5", sheet: "knight", name: "몽실", portrait: ["knight", 3, 0.55, 86], hp: 8, maxHp: 8, x: W + 140, y: FLOOR_Y,
       faceRight: true, rings: 0, openT: 0, top: 230, talkH: 270, fIdle: 0, fDying: 4, fDown: 5, walkF: [0], music: "boss", calm: "night",
-      tip: "몽실 등의 종을 구슬로 두 번! 구름 탄은 한 방!",
+      tip: "몽실의 종을 구슬로 두 번! BIG 구슬은 한 방!",
       hittable() { return !["dying", "down", "walkin", "wait"].includes(this.state) && this.inv <= 0; },
       box(b) { return Math.abs(this.x - b.x) < 90 && b.y > this.y - 220 && b.y < this.y + 20; },
       hit(ball) {
         if (this.state !== "open") {
-          this.rings += ball.type === "cloud" ? 2 : 1; Sound.sfx("bonus"); stars(this.x + 40, this.y - 150, 8);
+          this.rings += ball.big ? 2 : 1; Sound.sfx("bonus"); stars(this.x + 40, this.y - 150, 8);
           popText(this.x, this.y - 260, this.rings >= 2 ? "종이 멈췄다!" : "댕!", "#ffd23a", 26);
-          if (this.rings >= 2) { this.state = "open"; this.t = 0; this.openT = this.p2 ? 220 : 260; this.rings = 0; say(BX(this.lines).open, this); this.talkCd = 200;
+          if (this.rings >= (this.p2 ? 2 : 1)) { this.state = "open"; this.t = 0; this.openT = this.p2 ? 300 : 360; this.rings = 0; say(BX(this.lines).open, this); this.talkCd = 200;
             if (!game.knightTip2) { game.knightTip2 = true; game.tip = { str: "헬멧을 벗었다! 지금 맞혀!", t: 0 }; } }
           return true;
         }
@@ -1132,14 +1244,14 @@
       case "doze": b.frame = 6; if (b.t % 30 === 0) parts.push({ k: "text", x: b.x + 30, y: b.y - 200, vx: 0.4, vy: -0.7, life: 0, max: 40, str: "z", color: "#cfe3ff", size: 20 }); if (b.t > 60) chooseKnight(); break;
       case "open": b.frame = b.flinch > 0 ? 4 : 3; if (b.t % 40 === 0) parts.push({ k: "text", x: b.x + 30, y: b.y - 180, vx: 0.4, vy: -0.7, life: 0, max: 40, str: "하암", color: "#cfe3ff", size: 16 });
         if (--b.openT <= 0) { b.state = "recover"; b.t = 0; puff(b.x, b.y - 150, 8); popText(b.x, b.y - 250, "헬멧 착용!", "#cfd3ff", 20); } break;
-      case "summon": b.frame = 1; bossSummon(b, [["sheep", P.x < W / 2 ? 12 : 2]].concat(alive() < 1 ? [["goblin", 7]] : [])); if (b.t > 70) chooseKnight(); break;
+      case "summon": b.frame = 1; bossSummon(b, alive("sheep") ? [["goblin", P.x < W / 2 ? 12 : 2]] : [["sheep", P.x < W / 2 ? 13 : 1]]); if (b.t > 70) chooseKnight(); break;
     }
     b.x = clamp(b.x, 110, W - 110);
     if (["walk", "lance", "crouch", "taunt"].includes(b.state) && P.row === 0) bossContact(b, 80, 210);
   }
   function chooseKnight() {
     const b = boss; b.t = 0;
-    if ((alive() < 2 && game.t - b.lastSummon > 300) || (alive("sheep") === 0 && !hasAmmo("cloud") && P.tank.length < 2 && game.t - b.lastSummon > 200)) { b.state = "summon"; b.lastSummon = game.t; return; }
+    if (alive() < 3 && game.t - b.lastSummon > 240) { b.state = "summon"; b.lastSummon = game.t; return; }
     const r = Math.random(); b.state = r < 0.35 ? "lullaby" : r < 0.7 ? "crouch" : r < 0.9 ? "walk" : "taunt";
   }
 
@@ -1149,7 +1261,7 @@
   // Phase 2: he charges in his cape — slide past, and when the cape snags he is open.
   const SUPPORTS = [372, 480, 588];
   function makeKing() {
-    return bossCore({ kind: "king", lines: "boss6", sheet: "king", name: "욕심쟁이 왕", portrait: ["king", 0, 0.42, 84, -22], hp: 12, maxHp: 12, x: W / 2, y: 312, scale: 0.86,
+    return bossCore({ kind: "king", lines: "boss6", sheet: "king", name: "욕심쟁이 왕", portrait: ["king", 0, 0.42, 84, -22], hp: 14, maxHp: 14, x: W / 2, y: 312, scale: 0.86,
       sup: SUPPORTS.map(x => ({ x, hp: 2, hit: 0 })), phase: 1, top: 260, talkH: 250, fIdle: 0, fDying: 5, fDown: 6, music: "final", calm: "throne",
       tip: "왕좌 아래 받침 세 개를 구슬로 부숴!",
       hittable() { return this.phase === 2 && ["snag", "throw", "dazed"].includes(this.state) && this.inv <= 0; },
@@ -1159,7 +1271,8 @@
           if (ball.y < FLOOR_Y - 8) return false;
           for (const s of this.sup) {
             if (s.hp <= 0 || Math.abs(ball.x - s.x) > 62) continue;
-            const d = Math.min(s.hp, ball.power); s.hp -= d; s.hit = 16; ball.gone = true;
+            if (s.cool > 0) continue; // still wobbling from the last hit: the ball rolls on to the next support
+            const d = 1; s.hp -= d; s.cool = 40; s.hit = 16; ball.gone = true;
             this.hp -= d; this.hitFlash = 10; Sound.sfx("bossHit"); game.shake = 8; stars(s.x, FLOOR_Y - 40, 12); feathers(s.x, FLOOR_Y - 40, 8);
             addScore(1000 * d, s.x, FLOOR_Y - 120, "#ff9b3d");
             if (s.hp <= 0) { popText(s.x, FLOOR_Y - 150, "받침 와르르!", "#ffd23a", 24); Sound.sfx("explode"); this.shake = 20; if (this.sup.every(q => q.hp > 0 || q === s) && this.sup.filter(q => q.hp <= 0).length === 1) say(BX(this.lines).wobble, this); }
@@ -1182,7 +1295,7 @@
   function updateKing() {
     const b = boss; if (bossTick(b)) return;
     if (b.shake > 0) b.shake--;
-    b.sup.forEach(s => { if (s.hit > 0) s.hit--; });
+    b.sup.forEach(s => { if (s.hit > 0) s.hit--; if (s.cool > 0) s.cool--; });
     const face = () => { b.dir = P.x > b.x ? 1 : -1; };
     if (b.phase === 1) {
       if (b.state !== "collapse") b.y = 312 + Math.sin(game.t * 0.05) * 3 + (3 - b.sup.filter(s => s.hp > 0).length) * 10; face();
@@ -1198,7 +1311,7 @@
           if (b.t === 20) { for (let i = 0; i < 3; i++) { const tx = P.x + (i - 1) * 140, sx = b.x, sy = b.y - 160, air = 56 + i * 4;
             shots.push({ k: "coin", x: sx, y: sy, vx: (tx - sx) / air, vy: (P.y - 40 - sy - 0.5 * 0.32 * air * air) / air, rot: 0, life: 0 }); } Sound.sfx("item"); }
           if (b.t > 92) chooseKing(); break;
-        case "summon": b.frame = 0; bossSummon(b, [["guard", 1], ["pillowcoon", 13]]); if (b.t > 70) chooseKing(); break;
+        case "summon": b.frame = 0; bossSummon(b, [["goblin", 1], ["pillowcoon", 13]]); if (b.t > 70) chooseKing(); break;
         case "collapse": break;
       }
       if (b.state === "collapse") { // the throne comes down, the king tumbles to the floor
@@ -1215,10 +1328,10 @@
       case "dazed": b.frame = 5; if (b.t > 90) { say(BX(b.lines).phase2, b); b.talkCd = 220; chooseKing(); } break;
       case "walk": b.frame = 3; face(); b.x += b.dir * 1.5; if (b.t > 80) chooseKing(); break;
       case "stomp": b.frame = 7; face(); b.shiver = b.t > 10 ? 3 : 0; if (b.t === 2) popText(b.x, b.y - 260, "개굴!", "#ff9b3d", 24);
-        if (b.t > 40) { b.state = "charge"; b.t = 0; b.shiver = 0; Sound.sfx("whistle"); } break;
-      case "charge": b.frame = 4; b.x += b.dir * 8.4; if (b.t % 3 === 0) puff(b.x - b.dir * 80, b.y, 2);
+        if (b.t > 32) { b.state = "charge"; b.t = 0; b.shiver = 0; Sound.sfx("whistle"); } break;
+      case "charge": b.frame = 4; b.x += b.dir * 9.2; if (b.t % 3 === 0) puff(b.x - b.dir * 80, b.y, 2);
         if (b.x <= 130 || b.x >= W - 130) { b.state = "snag"; b.t = 0; game.shake = 14; Sound.sfx("slam"); say(BX(b.lines).snag, b); b.talkCd = 260; stars(b.x, b.y - 180, 10); } break;
-      case "snag": b.frame = b.flinch > 0 ? 5 : 6; b.dir = b.x < W / 2 ? -1 : 1; if (b.t > 200) { b.state = "recover"; b.t = 0; puff(b.x, b.y, 8); } break;
+      case "snag": b.frame = b.flinch > 0 ? 5 : 6; b.dir = b.x < W / 2 ? -1 : 1; if (b.t > 150) { b.state = "recover"; b.t = 0; puff(b.x, b.y, 8); } break;
       case "recover": b.frame = 3; if (b.t > 30) chooseKing(); break;
       case "throw": b.frame = b.t < 20 ? 3 : 1; face();
         if (b.t === 24) { const tx = P.x, ty = P.y - 45, sx = b.x + b.dir * 60, sy = b.y - 300, air = 58;
@@ -1284,7 +1397,7 @@
       Sound.playMusic(b.music || "boss"); b.state = "taunt"; b.t = 0; b.lastSummon = game.t - 120;
       game.tipsSeen = game.tipsSeen || {};
       if (!game.tipsSeen[b.kind]) { game.tipsSeen[b.kind] = true; game.tip = { str: b.tip, t: 0 }; }
-      ({ wash: [["wetcoon", 2], ["goblin", 12]], appraiser: [["boxbun", 3], ["goblin", 11]], knight: [["sheep", 2], ["goblin", 12]], king: [["pillowcoon", 1], ["goblin", 13]] })[b.kind].forEach(([ty, c]) => spawnEnemy(ty, c));
+      ({ wash: [["goblin", 2], ["goblin", 12]], appraiser: [["taggob", 3], ["goblin", 11]], knight: [["sheep", 2], ["goblin", 12]], king: [["pillowcoon", 1], ["goblin", 13]] })[b.kind].forEach(([ty, c]) => spawnEnemy(ty, c));
     }
   }
   const phase2 = () => boss.hp <= boss.maxHp / 2;
@@ -1313,7 +1426,7 @@
         b.frame = 0; face(); b.x += b.dir * 1.8 * sp;
         if (b.t > 70) chooseBossMove();
         break;
-      case "crouch": b.frame = 1; if (b.t > 22 / sp) {
+      case "crouch": b.frame = 1; if (b.t > (phase2() ? 22 : 30)) {
           b.state = "leap"; b.t = 0; b.vy = -15.5; face();
           const air = 2 * 15.5 / 0.7; b.vx = clamp((P.x - b.x) / air, -7, 7) * (phase2() ? 1.1 : 1); Sound.sfx("jump");
         } break;
@@ -1323,7 +1436,7 @@
           // landing knocks the wind out of him: the punish window (damage x2)
           b.y = FLOOR_Y; b.state = "stunned"; b.t = 0; game.shake = 16; Sound.sfx("slam"); puff(b.x, b.y, 18, "rgba(230,210,180,.9)", 5);
           if (b.talkCd <= 0 && BL().stunned && Math.random() < 0.45) { say(BL().stunned, b); b.talkCd = 300; }
-          waves.push({ x: b.x - 100, dir: -1, life: 0 }, { x: b.x + 100, dir: 1, life: 0 });
+          waves.push({ x: b.x - 60, dir: -1, life: 0, max: 52 }, { x: b.x + 60, dir: 1, life: 0, max: 52 });
         } break;
       case "recover": b.frame = 1; if (b.t > 40) chooseBossMove(); break;
       case "stunned": b.frame = 7; b.waking = b.t > (phase2() ? 64 : 80) - 20; if (b.t > (phase2() ? 64 : 80)) { b.state = "recover"; b.t = 0; b.waking = false; } break;
@@ -1365,7 +1478,7 @@
       case "down": b.frame = 5; return;
     }
     b.x = clamp(b.x, 120, W - 120);
-    if (!["stunned", "recover", "hurt"].includes(b.state) && P.state === "normal" && Math.abs(P.x - b.x) < 92 && P.y > b.y - 240 && P.y - 90 < b.y) hurtPlayer(b.x);
+    if (!["stunned", "recover", "hurt"].includes(b.state) && P.state === "normal" && Math.abs(P.x - b.x) < 92 && P.y > b.y - 240 && P.y - 90 < b.y) hurtPlayer(b.x, true);
   }
   function chooseBossMove() {
     const b = boss; b.t = 0;
@@ -1408,10 +1521,10 @@
   function startStage(i) {
     game.stage = i;
     const def = LEVELS[i];
-    L = { ...def, tiers: [null, ...def.tiers], t: 0, spawnQ: def.spawns.map(s => ({ type: s[0], col: s[1], at: s[2] + 70 })), respawnX: W / 2, clearT: -1, startScore: game.score };
+    L = { ...def, tiers: [null, ...def.tiers], t: 0, spawnQ: def.spawns.map(s => ({ type: s[0], col: s[1], at: s[2] + (s[3] != null ? 20 : 70), tier: s[3] })), respawnX: W / 2, clearT: -1, startScore: game.score };
     P = makePlayer(); P.inv = 0;
     if (["appraiser", "king"].includes(def.boss)) P.x = 200;
-    game.maxHp = HELP ? 7 : 5; game.hp = game.maxHp; game.deathsAtStart = game.deaths; L.startScore = game.score;
+    game.maxHp = HELP ? 5 : 3; if (def.n === 1 || def.boss || !game.hpCarry || params.has("stage")) game.hp = game.maxHp; else game.hp = Math.min(game.maxHp, game.hp + 1); game.hpCarry = true; game.deathsAtStart = game.deaths; L.startScore = game.score;
     saveProgress(i);
     enemies = []; balls = []; items = []; shots = []; parts = []; waves = [];
     boss = def.boss === "herald" ? makeHerald() : BOSS_KINDS[def.boss] ? BOSS_KINDS[def.boss].make() : def.boss ? makeBoss() : null;
@@ -1429,14 +1542,14 @@
     const ph = game.phase;
     if (ph === "ready") {
       if (game.phaseT === 1) { game.banner = { a: `STAGE ${stageLabel(game.stage)}`, b: (LINES.stageStart || [])[game.stage] || "READY?", t: 0 }; Sound.jingle("ready"); }
-      if (game.phaseT === 100) { game.banner = { a: "GO!", t: 0, big: true }; game.inputLock = false; P.inv = 90; }
+      if (game.phaseT === 100) { game.banner = { a: "GO!", t: 0, big: true }; game.inputLock = false; P.inv = 120; }
       if (game.phaseT === 150) { game.banner = null; game.phase = "fight"; if (L.tip) game.tip = { str: L.tip, t: 0 }; }
     }
     if (ph === "bossIntro") updateBossIntro();
     // spawns
     for (const s of L.spawnQ) {
-      if (!s.done && L.t >= s.at - 30 && L.t % 6 === 0) parts.push({ k: "star", x: s.col * T + T / 2 + rand(-10, 10), y: 96, vx: 0, vy: 1.5, life: 0, max: 20, r: 5, color: "#fff6c0" });
-      if (!s.done && L.t >= s.at) { s.done = true; spawnEnemy(s.type, s.col); }
+      if (!s.done && s.tier == null && L.t >= s.at - 30 && L.t % 6 === 0) parts.push({ k: "star", x: s.col * T + T / 2 + rand(-10, 10), y: 96, vx: 0, vy: 1.5, life: 0, max: 20, r: 5, color: "#fff6c0" });
+      if (!s.done && L.t >= s.at) { s.done = true; spawnEnemy(s.type, s.col, false, s.tier); }
     }
 
     updatePlayer();
@@ -1448,7 +1561,7 @@
     }
     // player vs enemies
     if (P.state === "normal") for (const e of enemies) {
-      if (["walk", "throw", "charge", "roll"].includes(e.state) && Math.abs(e.x - P.x) < e.hw + P.hw - 10 && Math.abs((e.y - 45) - (P.y - 50)) < 56) { hurtPlayer(e.x); break; }
+      if (["walk", "throw", "charge", "roll", "slip", "aim", "tired", "rest", "crouch"].includes(e.state) && !(e.vy < -1 && !e.onGround) && Math.abs(e.x - P.x) < e.hw + P.hw - 10 && Math.abs((e.y - 45) - (P.y - 50)) < 56) { hurtPlayer(e.x, e.state === "roll" || (e.state === "charge" && EDEF[e.type].guard)); break; }
     }
     if (L.stamp && !L.stamp.got && P.state === "normal" && Math.abs(P.x - L.stamp.x) < 44 && Math.abs(P.y - L.stamp.y) < 60) {
       L.stamp.got = true; saveStamp(L.chapter); Sound.sfx("oneup"); stars(L.stamp.x, L.stamp.y - 40, 14);
@@ -1458,9 +1571,29 @@
     enemies = enemies.filter(e => !e.gone); balls = balls.filter(b => !b.gone); items = items.filter(i => !i.gone);
     shots = shots.filter(s => !s.gone); waves = waves.filter(w => !w.gone);
 
-    // no timer, no invincible chaser: after a minute the remaining thieves get cross and speed up
-    if (!boss && ph === "fight" && L.t === 60 * 60 && enemies.length) {
-      game.hurry = true; game.banner = { a: "도둑들이 화났다!", t: 0, warn: true, life: 100, kr: true }; Sound.setTempo(1.2); Sound.sfx("whistle");
+    // hurry-up: dawdle and the Wake-up Alarm comes for the cat (invincible, homing, faster every ~7.75 s); thieves get cross too
+    if (ph === "fight" && !L.chaser && !(boss && boss.hp <= 0) && (boss || enemies.length || L.spawnQ.some(q => !q.done))) {
+      L.fightT = (L.fightT || 0) + 1;
+      const left = (boss ? HURRY_BOSS_T : hurryT()) - L.fightT;
+      if (left === 240 && !HELP) popText(W / 2, 140, "째깍째깍…", "#ffd23a", 26);
+      if (left > 0 && left <= 240 && left % 30 === 0 && !HELP) Sound.sfx("tick");
+      if (L.fightT >= (boss ? HURRY_BOSS_T : hurryT()) && !HELP) {
+        game.hurry = true; Sound.setTempo(1.2); Sound.sfx("whistle");
+        game.banner = { a: "따르릉! 자명종이 깼다!", t: 0, warn: true, life: 110, kr: true };
+        const fromLeft = P.x > W / 2;
+        L.chaser = { x: fromLeft ? -60 : W + 60, y: 120, vx: 0, vy: 0, t: 0, sp: 2.6, dir: fromLeft ? 1 : -1 };
+        if (!game.alarmTip) { game.alarmTip = true; game.tip = { str: "자명종은 못 잡아! 서둘러 끝내거나 도망쳐!", t: 0 }; }
+      }
+    }
+    if (L.chaser) updateChaser(L.chaser);
+    if (!boss && ph === "fight" && L.spawnQ.every(q => q.done)) {
+      const live = enemies.filter(e => !["dead"].includes(e.state));
+      const onlyElites = live.length > 0 && live.every(e => EDEF[e.type].elite);
+      const noAmmo = !P.tank.length && !P.shootQ && !balls.length && !shots.some(q => ["tag", "pillow"].includes(q.k));
+      L.eliteOnlyT = onlyElites && noAmmo ? (L.eliteOnlyT || 0) + 1 : 0;
+      if (L.eliteOnlyT > 120 && L.eliteOnlyT % 240 === 121 && live.filter(e => e.type === "goblin").length < 2) {
+        spawnEnemy("goblin", Math.random() < 0.5 ? 0 : 14); popText(W / 2, 150, "도둑 지원군!", "#ffd23a", 22);
+      }
     }
 
     // stage clear check
@@ -1471,9 +1604,8 @@
       if (game.phaseT === 70) { Sound.stopMusic(); Sound.jingle("clear"); game.inputLock = true; P.sucking = false;
         P.celebrate = { t: 0, mode: "stage" };
         const q = (LINES.stageClear || [])[game.stage]; if (q) setTimeout(() => say(q), 0);
-        const secs = Math.floor(L.t / 60), tb = Math.max(0, 60 - secs) * 100, nm = game.deathsAtStart === game.deaths ? 5000 : 0;
-        game.banner = { a: "STAGE CLEAR!", t: 0, tally: [["TIME BONUS", tb], ["NO MISS", nm]], life: 9999 };
-        game.pendingBonus = tb + nm; }
+        game.banner = { a: "STAGE CLEAR!", b: `♥ ${game.hp} / ${game.maxHp}`, t: 0, life: 9999 };
+        game.pendingBonus = 0; }
       if (game.phaseT === 150 && game.pendingBonus) { addScore(game.pendingBonus); Sound.sfx("bonus"); game.pendingBonus = 0; }
       if (game.phaseT > 260 || (game.phaseT > 170 && anyPress())) {
         game.phase = "out";
@@ -1718,7 +1850,11 @@
       if (e.state === "charge") return d.chargeFrame;
       return d.walk[Math.floor(e.anim) % d.walk.length];
     }
-    if (e.type === "boxbun") { if (e.state === "boxed" || e.state === "enter") return Math.floor(e.anim) % 2; if (e.state === "peek") return e.t < 0 ? 3 : 2; if (e.state === "pulled") return 3; return 4; }
+    if (e.type === "sack") return e.state === "dead" ? 3 : e.puffT > 0 ? 2 : e.spawnT < 34 || e.hitT > 0 ? 1 : 0;
+    if (e.type === "boxbun") return ["dead", "dazed"].includes(e.state) ? 4 : Math.floor(e.anim) % 2;
+    if (e.state === "aim") return d.aimFrame ?? d.thr ?? d.walk[0];
+    if (e.type === "wetcoon" && e.state === "slip") return 1;
+    if (e.type === "wetcoon" && e.state === "rest") return 3;
     if (e.type === "bat") return ({ hang: 0, wake: 1, swoop: 2, rise: 2, landed: 3, pulled: 3 })[e.state] ?? 4;
     if (e.type === "sheep" && e.state === "sing") return 3;
     if (e.type === "foamgob" && e.state === "pulled") return 3;
@@ -1740,7 +1876,20 @@
     if (!e.onGround && e.state !== "enter") return d.walk[1];
     return d.walk[Math.floor(e.anim) % d.walk.length];
   }
+  function drawElitePips(e) {
+    const max = eliteHp(), hp = e.hp ?? max;
+    const fy = e.y - (fr(e.type, 0) ? fr(e.type, 0).h : 100) - 14;
+    ctx.save(); ctx.fillStyle = "rgba(20,14,40,.75)"; roundRect(e.x - max * 10 - 6, fy - 12, max * 20 + 12, 24, 12); ctx.fill(); ctx.restore();
+    for (let i = 0; i < max; i++) { const x = e.x + (i - (max - 1) / 2) * 20, y = fy;
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fillStyle = i < hp ? "#ffd23a" : "rgba(30,20,50,.6)"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#2a1606"; ctx.stroke(); }
+  }
   function drawEnemy(e) {
+    if (e.state === "crouch" || (e.state === "charge" && e.t < 0)) { // squash tell before a hop or a charge
+      const k = 0.82 + Math.sin(e.t * 0.5) * 0.03;
+      return drawSprite(e.type, enemyFrame(e), e.x, e.y, { flip: e.dir < 0, sx: 1.12, sy: k });
+    }
+    if (e.appear > 0 && Math.floor(e.appear / 4) % 2) return; // blinking in
+    if (EDEF[e.type].elite && !["dead", "enter"].includes(e.state)) drawElitePips(e);
     const f = enemyFrame(e);
     const o = { flip: e.dir < 0 };
     if (e.state === "dead") { drawSprite(e.type, f, e.x, e.y - 45, { ...o, rot: e.rot, center: true }); return; }
@@ -1796,7 +1945,8 @@
     ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#0b0d1f"; ctx.stroke(); ctx.restore();
   }
   function drawBall(b) {
-    const cx = b.x, cy = b.y - 38, w = 1, R = 44, ph = b.rot;
+    const cx = b.x, cy = b.y - 38, w = 1, R = b.big ? 52 : 44, ph = b.rot;
+    if (b.big) { ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(game.t * 0.4) * 0.2; ctx.strokeStyle = "#ffd23a"; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(cx, cy, R + 6, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     ctx.save(); ctx.translate(cx, cy); ctx.scale(w, 2 - w);
     const body = ctx.createRadialGradient(-R * 0.3, -R * 0.32, R * 0.1, 0, 0, R);
     body.addColorStop(0, "rgba(255,255,255,.35)"); body.addColorStop(0.7, "rgba(200,240,255,.18)"); body.addColorStop(1, "rgba(170,200,255,.38)");
@@ -1870,6 +2020,9 @@
     if (s.k === "pillow") drawSprite("items", 3, s.x, s.y, { rot: s.rot, center: true, scale: 1.4 });
     if (s.k === "coin") drawCoin(s.x, s.y, s.life);
     if (s.k === "tag") drawTag(s.x, s.y, s.rot);
+    if (s.k === "bubble") { ctx.save(); const r = 20 + Math.sin(s.life * 0.2) * 2;
+      const g = ctx.createRadialGradient(s.x - 6, s.y - 7, 2, s.x, s.y, r); g.addColorStop(0, "rgba(255,255,255,.95)"); g.addColorStop(0.5, "rgba(255,170,220,.55)"); g.addColorStop(1, "rgba(235,90,170,.85)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#5a1440"; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); }
   }
   function drawCoin(x, y, t) {
     const w = Math.abs(Math.cos(t * 0.25)) * 13 + 3;
@@ -2113,6 +2266,7 @@
     shots.forEach(drawShot);
     if (P.state === "hurt") drawPlayer();
     if (bossOnTop) drawBoss();
+    if (L.chaser) drawChaser(L.chaser);
     drawParts();
     drawHUD();
     drawTip();
@@ -2142,12 +2296,13 @@
       if (boss && boss.hp > 0) { // boss fights continue where they were: the boss keeps the damage you dealt
         game.phase = "fight"; game.inputLock = false; game.hp = game.maxHp;
         Object.assign(P, makePlayer(), { inv: 180, x: W / 2 });
-        shots = []; waves = []; stars(P.x, P.y - 60, 14); puff(P.x, P.y, 10);
+        shots = []; waves = []; stars(P.x, P.y - 60, 14); puff(P.x, P.y, 10); L.chaser = null; L.fightT = 0; game.hurry = false; Sound.setTempo(1);
         Sound.playMusic(boss.music || "boss");
         return;
       }
       game.score = L.startScore;
-      wipeTo(() => startStage(game.stage));
+      const first = LEVELS.findIndex(l => l.chapter === LEVELS[game.stage].chapter); // out of hearts: back to the chapter's first stage
+      game.hpCarry = false; wipeTo(() => startStage(game.stage)); void first; // out of hearts: retry this stage with full hearts
     }
   }
 
@@ -2544,16 +2699,16 @@
   window.__game = {
     game, perf, get parts() { return parts; }, get shots() { return shots; }, get P() { return P; }, get enemies() { return enemies; }, get boss() { return boss; }, get balls() { return balls; }, get items() { return items; },
     startStage, startEnding, startTitle, startIntermission,
-    whenReady, packReady, get packs() { return Object.fromEntries(Object.entries(PACKS).map(([k, v]) => [k, v.state])); },
+    whenReady, packReady, get waves() { return waves; }, get chaser() { return L && L.chaser; }, get packs() { return Object.fromEntries(Object.entries(PACKS).map(([k, v]) => [k, v.state])); },
     panels(ch, part = "open") { const c = CHAPTERS[ch]; playPanels(part === "open" || part === "end" || part === "epilogue" ? c[part] : c.after[part], startTitle); },
     killAll() { enemies.forEach(e => { e.gone = true; }); L && L.spawnQ.forEach(s => s.done = true); },
     damageBoss(n = 1) { // debug/QA: lands n "fair" hits, opening each boss's defence first
       for (let i = 0; i < n && boss && boss.hp > 0; i++) {
         if (boss.kind === "king" && boss.phase === 1) { const s = boss.sup.find(q => q.hp > 0); if (s) boss.ballHook({ x: s.x, y: FLOOR_Y, power: 1 }); continue; }
         if (boss.kind === "appraiser") boss.open = boss.open || 200;
-        if (boss.kind === "knight" && boss.state !== "open") boss.hit({ vx: 1, power: 1, hits: 0, type: "cloud" });
+        if (boss.kind === "knight" && boss.state !== "open") boss.hit({ vx: 1, power: 1, hits: 0, big: true });
         if (boss.kind === "king" && boss.state !== "snag") { boss.state = "snag"; boss.t = 0; }
-        boss.hit({ vx: 1, power: 1, hits: 0, type: "water" });
+        boss.hit({ vx: 1, power: 1, hits: 0, big: true });
       } },
   };
 })();
